@@ -1,0 +1,203 @@
+# =========================================================================
+# DOCKER COMPOSE - GOALMANAGER DATABASE
+# =========================================================================
+# Versão: 1.0
+# Data: 29 de Outubro de 2025
+# Descrição: Ambiente MySQL completo para o projeto GoalManager
+# Inclui: MySQL 8.0, phpMyAdmin e volumes persistentes
+# =========================================================================
+
+version: '3.9'
+
+services:
+  # =========================================================================
+  # MYSQL DATABASE SERVICE
+  # =========================================================================
+  mysql:
+    image: mysql:8.0
+    container_name: goalmanager_mysql
+    restart: unless-stopped
+    
+    environment:
+      # Configurações principais
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root123!@#}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-goalmanager}
+      MYSQL_USER: ${MYSQL_USER:-goalmanager_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-goalmanager_pass123}
+      
+      # Configurações de timezone e charset
+      TZ: ${TZ:-America/Sao_Paulo}
+      
+      # Configurações do MySQL
+      MYSQL_INITDB_SKIP_TZINFO: 1
+    
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    
+    volumes:
+      # Volume para persistência de dados
+      - mysql_data:/var/lib/mysql
+      
+      # Script de inicialização
+      - ./scriptDB.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      
+      # Configurações customizadas do MySQL
+      - ./docker/mysql/conf.d:/etc/mysql/conf.d:ro
+      
+      # Logs
+      - mysql_logs:/var/log/mysql
+    
+    networks:
+      - goalmanager_network
+    
+    # Configurações de recursos
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+        reservations:
+          memory: 512M
+          cpus: '0.25'
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-root123!@#}"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    
+    # Configurações de segurança
+    security_opt:
+      - no-new-privileges:true
+    
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --default-time-zone='+00:00'
+      --sql-mode='STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'
+      --max-connections=200
+      --innodb-buffer-pool-size=256M
+      --innodb-log-file-size=64M
+      --innodb-flush-method=O_DIRECT
+      --slow-query-log=1
+      --slow-query-log-file=/var/log/mysql/slow.log
+      --long-query-time=2
+
+  # =========================================================================
+  # PHPMYADMIN SERVICE (Opcional - para desenvolvimento)
+  # =========================================================================
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin:latest
+    container_name: goalmanager_phpmyadmin
+    restart: unless-stopped
+    
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      PMA_USER: ${MYSQL_USER:-goalmanager_user}
+      PMA_PASSWORD: ${MYSQL_PASSWORD:-goalmanager_pass123}
+      
+      # Configurações do phpMyAdmin
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root123!@#}
+      PMA_ARBITRARY: 1
+      PMA_ABSOLUTE_URI: ${PHPMYADMIN_URL:-http://localhost:8080}
+      
+      # Configurações de upload e timeout
+      UPLOAD_LIMIT: 256M
+      MEMORY_LIMIT: 512M
+      MAX_EXECUTION_TIME: 300
+    
+    ports:
+      - "${PHPMYADMIN_PORT:-8080}:80"
+    
+    depends_on:
+      mysql:
+        condition: service_healthy
+    
+    networks:
+      - goalmanager_network
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+
+
+  # =========================================================================
+  # ADMINER (Alternativa leve ao phpMyAdmin)
+  # =========================================================================
+  adminer:
+    image: adminer:latest
+    container_name: goalmanager_adminer
+    restart: unless-stopped
+    
+    environment:
+      ADMINER_DEFAULT_SERVER: mysql
+      ADMINER_DESIGN: 'pappu687'
+      ADMINER_PLUGINS: 'tables-filter tinymce'
+    
+    ports:
+      - "${ADMINER_PORT:-8081}:8080"
+    
+    depends_on:
+      mysql:
+        condition: service_healthy
+    
+    networks:
+      - goalmanager_network
+
+# =========================================================================
+# NETWORKS
+# =========================================================================
+networks:
+  goalmanager_network:
+    driver: bridge
+    name: goalmanager_net
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# =========================================================================
+# VOLUMES
+# =========================================================================
+volumes:
+  # Volume principal do MySQL
+  mysql_data:
+    driver: local
+    name: goalmanager_mysql_data
+  
+  # Volume para logs do MySQL
+  mysql_logs:
+    driver: local
+    name: goalmanager_mysql_logs
+
+# =========================================================================
+# CONFIGURAÇÕES ADICIONAIS
+# =========================================================================
+# Este docker-compose.yml inclui:
+#
+# 1. MySQL 8.0 otimizado para desenvolvimento
+# 2. phpMyAdmin para administração via web
+# 3. Adminer como alternativa leve
+# 4. Volumes persistentes para dados
+# 5. Health checks para todos os serviços
+# 6. Configurações de segurança
+# 7. Limitação de recursos
+#
+# Comandos úteis:
+# - Iniciar: docker-compose up -d
+# - Parar: docker-compose down
+# - Logs: docker-compose logs -f mysql
+# - Backup: docker-compose exec mysql mysqldump -u root -p goalmanager > backup.sql
+# - Restore: docker-compose exec -i mysql mysql -u root -p goalmanager < backup.sql
+#
+# URLs de acesso:
+# - phpMyAdmin: http://localhost:8080
+# - Adminer: http://localhost:8081
+# - MySQL: localhost:3306
