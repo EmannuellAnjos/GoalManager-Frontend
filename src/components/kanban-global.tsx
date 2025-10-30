@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { Edit, AlertCircle, Clock, Search, Filter, Plus } from 'lucide-react';
@@ -14,10 +14,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from './ui/select';
-import { Tarefa, StatusTarefa, Prioridade } from '../lib/types';
+import { Tarefa, StatusTarefa, Prioridade, Objetivo, Habito } from '../lib/types';
 import { getTarefas, updateTarefa, getObjetivos, getHabitos, createTarefa } from '../lib/api';
 import { TarefaDialog } from './tarefa-dialog';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 const COLUNAS: { id: StatusTarefa; titulo: string }[] = [
   { id: 'backlog', titulo: 'Backlog' },
@@ -35,11 +35,37 @@ export function KanbanGlobal() {
   const [filtroPrazo, setFiltroPrazo] = useState<string>('todos');
   const [tarefaEditando, setTarefaEditando] = useState<Tarefa | undefined>();
   const [dialogAberto, setDialogAberto] = useState(false);
-  const [, setRefresh] = useState(0);
+  
+  // Estados para dados assíncronos
+  const [tarefas, setTarefas] = useState<Tarefa[]>([]);
+  const [objetivos, setObjetivos] = useState<Objetivo[]>([]);
+  const [habitos, setHabitos] = useState<Habito[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const tarefas = getTarefas();
-  const objetivos = getObjetivos();
-  const habitos = getHabitos();
+  // Carregar dados iniciais
+  useEffect(() => {
+    const carregarDados = async () => {
+      try {
+        setLoading(true);
+        const [tarefasResponse, objetivosResponse, habitosResponse] = await Promise.all([
+          getTarefas(),
+          getObjetivos(),
+          getHabitos(),
+        ]);
+        
+        setTarefas(tarefasResponse.data);
+        setObjetivos(objetivosResponse.data);
+        setHabitos(habitosResponse.data);
+      } catch (error) {
+        console.error('Erro ao carregar dados:', error);
+        toast.error('Erro ao carregar dados');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    carregarDados();
+  }, []);
 
   const tarefasFiltradas = useMemo(() => {
     let resultado = [...tarefas];
@@ -106,10 +132,17 @@ export function KanbanGlobal() {
     return habitos.filter((h) => h.objetivoId === filtroObjetivo);
   }, [habitos, filtroObjetivo]);
 
-  const handleDrop = (tarefaId: string, novoStatus: StatusTarefa) => {
-    updateTarefa(tarefaId, { status: novoStatus });
-    toast.success('Status da tarefa atualizado!');
-    setRefresh((r) => r + 1);
+  const handleDrop = async (tarefaId: string, novoStatus: StatusTarefa) => {
+    try {
+      const response = await updateTarefa(tarefaId, { status: novoStatus });
+      setTarefas(prev => prev.map(tarefa => 
+        tarefa.id === tarefaId ? response.data : tarefa
+      ));
+      toast.success('Status da tarefa atualizado!');
+    } catch (error) {
+      console.error('Erro ao atualizar status da tarefa:', error);
+      toast.error('Erro ao atualizar status da tarefa');
+    }
   };
 
   const handleEditar = (tarefa: Tarefa) => {
@@ -122,15 +155,23 @@ export function KanbanGlobal() {
     setDialogAberto(true);
   };
 
-  const handleSalvar = (data: Omit<Tarefa, 'id' | 'createdAt' | 'updatedAt'>) => {
-    if (tarefaEditando) {
-      updateTarefa(tarefaEditando.id, data);
-      toast.success('Tarefa atualizada com sucesso!');
-    } else {
-      createTarefa(data);
-      toast.success('Tarefa criada com sucesso!');
+  const handleSalvar = async (data: Omit<Tarefa, 'id' | 'createdAt' | 'updatedAt'>) => {
+    try {
+      if (tarefaEditando) {
+        const response = await updateTarefa(tarefaEditando.id, data);
+        setTarefas(prev => prev.map(tarefa => 
+          tarefa.id === tarefaEditando.id ? response.data : tarefa
+        ));
+        toast.success('Tarefa atualizada com sucesso!');
+      } else {
+        const response = await createTarefa(data);
+        setTarefas(prev => [...prev, response.data]);
+        toast.success('Tarefa criada com sucesso!');
+      }
+    } catch (error) {
+      console.error('Erro ao salvar tarefa:', error);
+      toast.error('Erro ao salvar tarefa');
     }
-    setRefresh((r) => r + 1);
   };
 
   const limparFiltros = () => {
@@ -140,6 +181,17 @@ export function KanbanGlobal() {
     setFiltroPrioridade('todos');
     setFiltroPrazo('todos');
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto mb-4"></div>
+          <p className="text-gray-600">Carregando tarefas...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">

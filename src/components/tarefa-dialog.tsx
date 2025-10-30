@@ -5,7 +5,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Tarefa, StatusTarefa, Prioridade } from '../lib/types';
+import { Tarefa, StatusTarefa, Prioridade, Objetivo, Habito } from '../lib/types';
 import { getObjetivos, getHabitos } from '../lib/api';
 import { Slider } from './ui/slider';
 
@@ -39,11 +39,38 @@ export function TarefaDialog({
     progresso: 0,
   });
 
-  const objetivos = getObjetivos();
-  const habitos = getHabitos();
+  // Estados para dados assíncronos
+  const [objetivos, setObjetivos] = useState<Objetivo[]>([]);
+  const [habitos, setHabitos] = useState<Habito[]>([]);
+  const [loading, setLoading] = useState(true);
+
   const habitosFiltrados = formData.objetivoId 
     ? habitos.filter(h => h.objetivoId === formData.objetivoId)
     : habitos;
+
+  // Carregar dados quando o dialog abrir
+  useEffect(() => {
+    if (open) {
+      const carregarDados = async () => {
+        try {
+          setLoading(true);
+          const [objetivosResponse, habitosResponse] = await Promise.all([
+            getObjetivos(),
+            getHabitos(),
+          ]);
+          
+          setObjetivos(objetivosResponse.data);
+          setHabitos(habitosResponse.data);
+        } catch (error) {
+          console.error('Erro ao carregar dados:', error);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      carregarDados();
+    }
+  }, [open]);
 
   useEffect(() => {
     if (tarefa) {
@@ -95,6 +122,12 @@ export function TarefaDialog({
         <DialogHeader>
           <DialogTitle>{tarefa ? 'Editar Tarefa' : 'Nova Tarefa'}</DialogTitle>
         </DialogHeader>
+        {loading ? (
+          <div className="flex items-center justify-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+            <span className="ml-2 text-gray-600">Carregando...</span>
+          </div>
+        ) : (
         <form onSubmit={handleSubmit}>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
@@ -124,7 +157,7 @@ export function TarefaDialog({
                 <Label htmlFor="objetivoId">Objetivo</Label>
                 <Select
                   value={formData.objetivoId || 'none'}
-                  onValueChange={(value) => {
+                  onValueChange={(value: any) => {
                     const objetivoId = value === 'none' ? '' : value;
                     setFormData({ ...formData, objetivoId, habitoId: '' });
                   }}
@@ -147,7 +180,7 @@ export function TarefaDialog({
                 <Label htmlFor="habitoId">Hábito</Label>
                 <Select
                   value={formData.habitoId || 'none'}
-                  onValueChange={(value) => {
+                  onValueChange={(value: any) => {
                     const habitoId = value === 'none' ? '' : value;
                     setFormData({ ...formData, habitoId });
                   }}
@@ -259,7 +292,7 @@ export function TarefaDialog({
                 max={99}
                 step={1}
                 value={[formData.progresso]}
-                onValueChange={([value]) => setFormData({ ...formData, progresso: value })}
+                onValueChange={([value]:any) => setFormData({ ...formData, progresso: value })}
                 disabled={formData.status === 'concluida'}
               />
             </div>
@@ -274,6 +307,7 @@ export function TarefaDialog({
             </Button>
           </DialogFooter>
         </form>
+        )}
       </DialogContent>
     </Dialog>
   );

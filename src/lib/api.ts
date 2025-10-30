@@ -1,220 +1,376 @@
-import { Objetivo, Habito, Tarefa } from './types';
-import { objetivosIniciais, habitosIniciais, tarefasIniciais } from './mock-data';
-import { recalcularTodosProgressos } from './progress-calculator';
+import { Objetivo, Habito, Tarefa, ApiResponse, QueryParams, DashboardData } from './types';
 
-// Estado global da aplicação (simulando banco de dados)
-let objetivos: Objetivo[] = [...objetivosIniciais];
-let habitos: Habito[] = [...habitosIniciais];
-let tarefas: Tarefa[] = [...tarefasIniciais];
+// Configuração da API
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+const USER_ID = import.meta.env.VITE_USER_ID || '550e8400-e29b-41d4-a716-446655440000';
 
-// Recalcular progressos iniciais
-const dadosRecalculados = recalcularTodosProgressos(objetivos, habitos, tarefas);
-objetivos = dadosRecalculados.objetivos;
-habitos = dadosRecalculados.habitos;
-tarefas = dadosRecalculados.tarefas;
-
-// Funções auxiliares
-function gerarId(prefixo: string): string {
-  return `${prefixo}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-}
-
-function atualizarTimestamp(entidade: any): any {
-  return {
-    ...entidade,
-    updatedAt: new Date().toISOString(),
+// Interface para resposta de login
+interface LoginResponse {
+  data: {
+    access_token: string;
+    user: {
+      id: string;
+      email: string;
+      name: string;
+    };
   };
 }
 
-function recalcularEAtualizar() {
-  const recalculados = recalcularTodosProgressos(objetivos, habitos, tarefas);
-  objetivos = recalculados.objetivos;
-  habitos = recalculados.habitos;
-  tarefas = recalculados.tarefas;
+// Função para fazer login e obter token real
+async function loginAndGetToken(): Promise<string> {
+  const loginUrl = `${API_BASE_URL}/auth/login`;
+  
+  console.log('🔑 Fazendo login automático...');
+  
+  try {
+    const response = await fetch(loginUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        email: 'teste@goalmanager.com',
+        password: 'password'
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Login failed: ${response.status} ${response.statusText}`);
+    }
+
+    const data: LoginResponse = await response.json();
+    const token = data.data.access_token;
+    
+    // Salvar token no localStorage
+    localStorage.setItem('auth_token', token);
+    
+    console.log('✅ Login realizado com sucesso!');
+    console.log('🔐 Token obtido:', token);
+    console.log('👤 Usuário:', data.data.user);
+    
+    return token;
+  } catch (error) {
+    console.error('❌ Erro no login automático:', error);
+    // Fallback para token fictício
+    const fallbackToken = `dev-token-${USER_ID}`;
+    console.log('🔄 Usando token fictício como fallback:', fallbackToken);
+    return fallbackToken;
+  }
+}
+
+// Cache do token para evitar múltiplos logins
+let cachedToken: string | null = null;
+
+// Função para obter o token de autenticação
+function getAuthToken(): string {
+  // Verificar se já temos um token no localStorage
+  const storedToken = localStorage.getItem('auth_token');
+  if (storedToken) {
+    console.log('🔐 Usando token do localStorage:', storedToken);
+    return storedToken;
+  }
+  
+  // Se não temos token, usar o fictício por enquanto
+  // (o login será feito de forma assíncrona)
+  const fallbackToken = `dev-token-${USER_ID}`;
+  console.log('🔄 Usando token fictício temporário:', fallbackToken);
+  
+  return fallbackToken;
+}
+
+// Função para inicializar autenticação (deve ser chamada no início da aplicação)
+export async function initializeAuth(): Promise<void> {
+  console.log('🚀 Inicializando autenticação...');
+  
+  // Verificar se já temos token válido
+  const storedToken = localStorage.getItem('auth_token');
+  if (storedToken) {
+    console.log('✅ Token encontrado no localStorage');
+    return;
+  }
+  
+  // Fazer login automático
+  try {
+    await loginAndGetToken();
+  } catch (error) {
+    console.error('❌ Falha na inicialização da autenticação:', error);
+  }
+}
+
+// Função para forçar renovação do token (útil para testes)
+export async function refreshToken(): Promise<void> {
+  console.log('🔄 Forçando renovação do token...');
+  
+  // Limpar token atual
+  localStorage.removeItem('auth_token');
+  cachedToken = null;
+  
+  // Fazer novo login
+  try {
+    await loginAndGetToken();
+    console.log('✅ Token renovado com sucesso');
+  } catch (error) {
+    console.error('❌ Falha na renovação do token:', error);
+    throw error;
+  }
+}
+
+// Função auxiliar para fazer requisições HTTP
+async function makeRequest<T>(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<T> {
+  const url = `${API_BASE_URL}${endpoint}`;
+  
+  const defaultHeaders = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${getAuthToken()}`,
+  };
+
+  const config: RequestInit = {
+    ...options,
+    headers: {
+      ...defaultHeaders,
+      ...options.headers,
+    },
+  };
+
+  // Debug: Log da requisição
+  console.log('🚀 Fazendo requisição:', {
+    url,
+    method: config.method || 'GET',
+    headers: config.headers
+  });
+
+  try {
+    const response = await fetch(url, config);
+    
+    // Se receber 401 (Unauthorized), tentar renovar token
+    if (response.status === 401) {
+      console.warn('🔄 Token expirado (401), tentando renovar...');
+      
+      try {
+        // Limpar token antigo
+        localStorage.removeItem('auth_token');
+        
+        // Fazer novo login
+        await loginAndGetToken();
+        
+        // Atualizar headers com novo token
+        const newConfig = {
+          ...config,
+          headers: {
+            ...config.headers,
+            'Authorization': `Bearer ${getAuthToken()}`,
+          },
+        };
+        
+        console.log('🔄 Tentando requisição novamente com novo token...');
+        
+        // Tentar a requisição novamente
+        const retryResponse = await fetch(url, newConfig);
+        
+        if (!retryResponse.ok) {
+          throw new Error(`HTTP ${retryResponse.status}: ${retryResponse.statusText}`);
+        }
+
+        // Para DELETE sem conteúdo
+        if (retryResponse.status === 204) {
+          return {} as T;
+        }
+
+        console.log('✅ Requisição bem-sucedida após renovação do token');
+        return await retryResponse.json();
+        
+      } catch (refreshError) {
+        console.error('❌ Falha ao renovar token:', refreshError);
+        throw new Error(`Authentication failed: ${response.status} ${response.statusText}`);
+      }
+    }
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    // Para DELETE sem conteúdo
+    if (response.status === 204) {
+      return {} as T;
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('API request failed:', error);
+    throw error;
+  }
+}
+
+// Função auxiliar para construir query string
+function buildQueryString(params: QueryParams): string {
+  const queryParams = new URLSearchParams();
+  
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      if (Array.isArray(value)) {
+        value.forEach(v => queryParams.append(key, v.toString()));
+      } else {
+        queryParams.set(key, value.toString());
+      }
+    }
+  });
+  
+  return queryParams.toString() ? `?${queryParams.toString()}` : '';
 }
 
 // ==================== OBJETIVOS ====================
 
-export function getObjetivos(): Objetivo[] {
-  return [...objetivos];
+export async function getObjetivos(params: QueryParams = {}): Promise<ApiResponse<Objetivo[]>> {
+  const queryString = buildQueryString(params);
+  return makeRequest<ApiResponse<Objetivo[]>>(`/objetivos${queryString}`);
 }
 
-export function getObjetivo(id: string): Objetivo | undefined {
-  return objetivos.find(o => o.id === id);
+export async function getObjetivo(id: string): Promise<ApiResponse<Objetivo>> {
+  return makeRequest<ApiResponse<Objetivo>>(`/objetivos/${id}`);
 }
 
-export function createObjetivo(data: Omit<Objetivo, 'id' | 'createdAt' | 'updatedAt'>): Objetivo {
-  const novoObjetivo: Objetivo = {
-    ...data,
-    id: gerarId('obj'),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-  objetivos.push(novoObjetivo);
-  recalcularEAtualizar();
-  return novoObjetivo;
-}
-
-export function updateObjetivo(id: string, data: Partial<Objetivo>): Objetivo | undefined {
-  const index = objetivos.findIndex(o => o.id === id);
-  if (index === -1) return undefined;
-  
-  objetivos[index] = atualizarTimestamp({ ...objetivos[index], ...data });
-  recalcularEAtualizar();
-  return objetivos[index];
-}
-
-export function deleteObjetivo(id: string): boolean {
-  const index = objetivos.findIndex(o => o.id === id);
-  if (index === -1) return false;
-  
-  // Remover hábitos e tarefas vinculados
-  habitos = habitos.filter(h => h.objetivoId !== id);
-  tarefas = tarefas.filter(t => t.objetivoId !== id);
-  
-  objetivos.splice(index, 1);
-  recalcularEAtualizar();
-  return true;
-}
-
-export function deleteObjetivos(ids: string[]): number {
-  let deleted = 0;
-  ids.forEach(id => {
-    if (deleteObjetivo(id)) deleted++;
+export async function createObjetivo(data: Omit<Objetivo, 'id' | 'createdAt' | 'updatedAt'>): Promise<ApiResponse<Objetivo>> {
+  return makeRequest<ApiResponse<Objetivo>>('/objetivos', {
+    method: 'POST',
+    body: JSON.stringify(data),
   });
-  return deleted;
+}
+
+export async function updateObjetivo(id: string, data: Partial<Objetivo>): Promise<ApiResponse<Objetivo>> {
+  return makeRequest<ApiResponse<Objetivo>>(`/objetivos/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteObjetivo(id: string): Promise<void> {
+  return makeRequest<void>(`/objetivos/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function deleteObjetivos(ids: string[]): Promise<{ message: string; deletedCount: number }> {
+  return makeRequest<{ message: string; deletedCount: number }>('/objetivos', {
+    method: 'DELETE',
+    body: JSON.stringify({ ids }),
+  });
 }
 
 // ==================== HÁBITOS ====================
 
-export function getHabitos(): Habito[] {
-  return [...habitos];
+export async function getHabitos(params: QueryParams = {}): Promise<ApiResponse<Habito[]>> {
+  const queryString = buildQueryString(params);
+  return makeRequest<ApiResponse<Habito[]>>(`/habitos${queryString}`);
 }
 
-export function getHabitosByObjetivo(objetivoId: string): Habito[] {
-  return habitos.filter(h => h.objetivoId === objetivoId);
+export async function getHabitosByObjetivo(objetivoId: string): Promise<ApiResponse<Habito[]>> {
+  return makeRequest<ApiResponse<Habito[]>>(`/objetivos/${objetivoId}/habitos`);
 }
 
-export function getHabito(id: string): Habito | undefined {
-  return habitos.find(h => h.id === id);
+export async function getHabito(id: string): Promise<ApiResponse<Habito>> {
+  return makeRequest<ApiResponse<Habito>>(`/habitos/${id}`);
 }
 
-export function createHabito(data: Omit<Habito, 'id' | 'createdAt' | 'updatedAt'>): Habito {
-  const novoHabito: Habito = {
-    ...data,
-    id: gerarId('hab'),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-  habitos.push(novoHabito);
-  recalcularEAtualizar();
-  return novoHabito;
-}
-
-export function updateHabito(id: string, data: Partial<Habito>): Habito | undefined {
-  const index = habitos.findIndex(h => h.id === id);
-  if (index === -1) return undefined;
-  
-  habitos[index] = atualizarTimestamp({ ...habitos[index], ...data });
-  recalcularEAtualizar();
-  return habitos[index];
-}
-
-export function deleteHabito(id: string): boolean {
-  const index = habitos.findIndex(h => h.id === id);
-  if (index === -1) return false;
-  
-  // Remover tarefas vinculadas
-  tarefas = tarefas.filter(t => t.habitoId !== id);
-  
-  habitos.splice(index, 1);
-  recalcularEAtualizar();
-  return true;
-}
-
-export function deleteHabitos(ids: string[]): number {
-  let deleted = 0;
-  ids.forEach(id => {
-    if (deleteHabito(id)) deleted++;
+export async function createHabito(data: Omit<Habito, 'id' | 'createdAt' | 'updatedAt'>): Promise<ApiResponse<Habito>> {
+  return makeRequest<ApiResponse<Habito>>('/habitos', {
+    method: 'POST',
+    body: JSON.stringify(data),
   });
-  return deleted;
 }
 
-export function marcarHabitoFeito(id: string): Habito | undefined {
-  const index = habitos.findIndex(h => h.id === id);
-  if (index === -1) return undefined;
-  
-  habitos[index] = atualizarTimestamp({
-    ...habitos[index],
-    realizadosNoPeriodo: habitos[index].realizadosNoPeriodo + 1,
+export async function updateHabito(id: string, data: Partial<Habito>): Promise<ApiResponse<Habito>> {
+  return makeRequest<ApiResponse<Habito>>(`/habitos/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
   });
-  recalcularEAtualizar();
-  return habitos[index];
 }
 
-export function resetarHabitoCiclo(id: string): Habito | undefined {
-  const index = habitos.findIndex(h => h.id === id);
-  if (index === -1) return undefined;
-  
-  habitos[index] = atualizarTimestamp({
-    ...habitos[index],
-    realizadosNoPeriodo: 0,
+export async function deleteHabito(id: string): Promise<void> {
+  return makeRequest<void>(`/habitos/${id}`, {
+    method: 'DELETE',
   });
-  recalcularEAtualizar();
-  return habitos[index];
+}
+
+export async function deleteHabitos(ids: string[]): Promise<{ message: string; deletedCount: number }> {
+  return makeRequest<{ message: string; deletedCount: number }>('/habitos', {
+    method: 'DELETE',
+    body: JSON.stringify({ ids }),
+  });
+}
+
+export async function marcarHabitoFeito(id: string): Promise<ApiResponse<{ id: string; realizadosNoPeriodo: number; progresso: number; updatedAt: string }>> {
+  return makeRequest<ApiResponse<{ id: string; realizadosNoPeriodo: number; progresso: number; updatedAt: string }>>(`/habitos/${id}/marcar-feito`, {
+    method: 'POST',
+  });
+}
+
+export async function resetarHabitoCiclo(id: string): Promise<ApiResponse<{ id: string; realizadosNoPeriodo: number; progresso: number; updatedAt: string }>> {
+  return makeRequest<ApiResponse<{ id: string; realizadosNoPeriodo: number; progresso: number; updatedAt: string }>>(`/habitos/${id}/reset-ciclo`, {
+    method: 'POST',
+  });
 }
 
 // ==================== TAREFAS ====================
 
-export function getTarefas(): Tarefa[] {
-  return [...tarefas];
+export async function getTarefas(params: QueryParams = {}): Promise<ApiResponse<Tarefa[]>> {
+  const queryString = buildQueryString(params);
+  return makeRequest<ApiResponse<Tarefa[]>>(`/tarefas${queryString}`);
 }
 
-export function getTarefasByObjetivo(objetivoId: string): Tarefa[] {
-  return tarefas.filter(t => t.objetivoId === objetivoId);
+export async function getTarefasByObjetivo(objetivoId: string): Promise<ApiResponse<Tarefa[]>> {
+  return makeRequest<ApiResponse<Tarefa[]>>(`/objetivos/${objetivoId}/tarefas`);
 }
 
-export function getTarefasByHabito(habitoId: string): Tarefa[] {
-  return tarefas.filter(t => t.habitoId === habitoId);
+export async function getTarefasByHabito(habitoId: string): Promise<ApiResponse<Tarefa[]>> {
+  return makeRequest<ApiResponse<Tarefa[]>>(`/habitos/${habitoId}/tarefas`);
 }
 
-export function getTarefa(id: string): Tarefa | undefined {
-  return tarefas.find(t => t.id === id);
+export async function getTarefa(id: string): Promise<ApiResponse<Tarefa>> {
+  return makeRequest<ApiResponse<Tarefa>>(`/tarefas/${id}`);
 }
 
-export function createTarefa(data: Omit<Tarefa, 'id' | 'createdAt' | 'updatedAt'>): Tarefa {
-  const novaTarefa: Tarefa = {
-    ...data,
-    id: gerarId('tar'),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-  tarefas.push(novaTarefa);
-  recalcularEAtualizar();
-  return novaTarefa;
-}
-
-export function updateTarefa(id: string, data: Partial<Tarefa>): Tarefa | undefined {
-  const index = tarefas.findIndex(t => t.id === id);
-  if (index === -1) return undefined;
-  
-  tarefas[index] = atualizarTimestamp({ ...tarefas[index], ...data });
-  recalcularEAtualizar();
-  return tarefas[index];
-}
-
-export function deleteTarefa(id: string): boolean {
-  const index = tarefas.findIndex(t => t.id === id);
-  if (index === -1) return false;
-  
-  tarefas.splice(index, 1);
-  recalcularEAtualizar();
-  return true;
-}
-
-export function deleteTarefas(ids: string[]): number {
-  let deleted = 0;
-  ids.forEach(id => {
-    if (deleteTarefa(id)) deleted++;
+export async function createTarefa(data: Omit<Tarefa, 'id' | 'createdAt' | 'updatedAt'>): Promise<ApiResponse<Tarefa>> {
+  return makeRequest<ApiResponse<Tarefa>>('/tarefas', {
+    method: 'POST',
+    body: JSON.stringify(data),
   });
-  return deleted;
+}
+
+export async function updateTarefa(id: string, data: Partial<Tarefa>): Promise<ApiResponse<Tarefa>> {
+  return makeRequest<ApiResponse<Tarefa>>(`/tarefas/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteTarefa(id: string): Promise<void> {
+  return makeRequest<void>(`/tarefas/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function deleteTarefas(ids: string[]): Promise<{ message: string; deletedCount: number }> {
+  return makeRequest<{ message: string; deletedCount: number }>('/tarefas', {
+    method: 'DELETE',
+    body: JSON.stringify({ ids }),
+  });
+}
+
+// ==================== UTILITÁRIOS ====================
+
+export async function recalcularProgressos(): Promise<{ message: string; updatedAt: string }> {
+  return makeRequest<{ message: string; updatedAt: string }>('/recalcular-progressos', {
+    method: 'POST',
+  });
+}
+
+export async function getHealthCheck(): Promise<{ status: string; timestamp: string; version: string }> {
+  return makeRequest<{ status: string; timestamp: string; version: string }>('/health');
+}
+
+export async function getDashboard(): Promise<ApiResponse<DashboardData>> {
+  return makeRequest<ApiResponse<DashboardData>>('/dashboard');
 }

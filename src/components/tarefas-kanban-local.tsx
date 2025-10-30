@@ -8,8 +8,8 @@ import { Progress } from './ui/progress';
 import { Tarefa, StatusTarefa, Prioridade } from '../lib/types';
 import { getTarefasByHabito, updateTarefa } from '../lib/api';
 import { TarefaDialog } from './tarefa-dialog';
-import { useState } from 'react';
-import { toast } from 'sonner@2.0.3';
+import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 
 interface TarefasKanbanLocalProps {
   objetivoId: string;
@@ -36,13 +36,39 @@ export function TarefasKanbanLocal({ objetivoId, habitoId, onRefresh }: TarefasK
 function KanbanContent({ objetivoId, habitoId, onRefresh }: TarefasKanbanLocalProps) {
   const [tarefaEditando, setTarefaEditando] = useState<Tarefa | undefined>();
   const [dialogAberto, setDialogAberto] = useState(false);
+  const [tarefas, setTarefas] = useState<Tarefa[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const tarefas = getTarefasByHabito(habitoId);
+  // Carregar tarefas quando o componente montar ou habitoId mudar
+  useEffect(() => {
+    const carregarTarefas = async () => {
+      try {
+        setLoading(true);
+        const response = await getTarefasByHabito(habitoId);
+        setTarefas(response.data || []);
+      } catch (error) {
+        console.error('Erro ao carregar tarefas:', error);
+        setTarefas([]);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const handleDrop = (tarefaId: string, novoStatus: StatusTarefa) => {
-    updateTarefa(tarefaId, { status: novoStatus });
-    toast.success('Status da tarefa atualizado!');
-    onRefresh();
+    carregarTarefas();
+  }, [habitoId]);
+
+  const handleDrop = async (tarefaId: string, novoStatus: StatusTarefa) => {
+    try {
+      await updateTarefa(tarefaId, { status: novoStatus });
+      toast.success('Status da tarefa atualizado!');
+      // Recarregar a lista de tarefas
+      const response = await getTarefasByHabito(habitoId);
+      setTarefas(response.data || []);
+      onRefresh();
+    } catch (error) {
+      console.error('Erro ao atualizar status da tarefa:', error);
+      toast.error('Erro ao atualizar status da tarefa');
+    }
   };
 
   const handleEditar = (tarefa: Tarefa) => {
@@ -50,13 +76,29 @@ function KanbanContent({ objetivoId, habitoId, onRefresh }: TarefasKanbanLocalPr
     setDialogAberto(true);
   };
 
-  const handleSalvar = (data: Omit<Tarefa, 'id' | 'createdAt' | 'updatedAt'>) => {
+  const handleSalvar = async (data: Omit<Tarefa, 'id' | 'createdAt' | 'updatedAt'>) => {
     if (tarefaEditando) {
-      updateTarefa(tarefaEditando.id, data);
-      toast.success('Tarefa atualizada com sucesso!');
-      onRefresh();
+      try {
+        await updateTarefa(tarefaEditando.id, data);
+        toast.success('Tarefa atualizada com sucesso!');
+        // Recarregar a lista de tarefas
+        const response = await getTarefasByHabito(habitoId);
+        setTarefas(response.data || []);
+        onRefresh();
+      } catch (error) {
+        console.error('Erro ao atualizar tarefa:', error);
+        toast.error('Erro ao atualizar tarefa');
+      }
     }
   };
+
+  if (loading) {
+    return (
+      <div className="border rounded-lg p-8 text-center text-gray-500">
+        Carregando tarefas...
+      </div>
+    );
+  }
 
   if (tarefas.length === 0) {
     return (

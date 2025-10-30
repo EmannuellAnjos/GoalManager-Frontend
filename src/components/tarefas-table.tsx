@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Edit, Trash2, MoreVertical, AlertCircle } from 'lucide-react';
 import { Button } from './ui/button';
 import { Progress } from './ui/progress';
@@ -32,7 +32,7 @@ import {
 import { Tarefa, StatusTarefa, Prioridade } from '../lib/types';
 import { getTarefasByHabito, updateTarefa, deleteTarefa, createTarefa } from '../lib/api';
 import { TarefaDialog } from './tarefa-dialog';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 interface TarefasTableProps {
   objetivoId: string;
@@ -46,8 +46,26 @@ export function TarefasTable({ objetivoId, habitoId, onRefresh }: TarefasTablePr
   const [tarefaEditando, setTarefaEditando] = useState<Tarefa | undefined>();
   const [deleteDialogAberto, setDeleteDialogAberto] = useState(false);
   const [tarefaParaDeletar, setTarefaParaDeletar] = useState<string | null>(null);
+  const [tarefas, setTarefas] = useState<Tarefa[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const tarefas = getTarefasByHabito(habitoId);
+  // Carregar tarefas quando o componente montar ou habitoId mudar
+  useEffect(() => {
+    const carregarTarefas = async () => {
+      try {
+        setLoading(true);
+        const response = await getTarefasByHabito(habitoId);
+        setTarefas(response.data || []);
+      } catch (error) {
+        console.error('Erro ao carregar tarefas:', error);
+        setTarefas([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    carregarTarefas();
+  }, [habitoId]);
 
   const toggleSelected = (id: string) => {
     const newSet = new Set(selectedTarefas);
@@ -64,15 +82,23 @@ export function TarefasTable({ objetivoId, habitoId, onRefresh }: TarefasTablePr
     setDialogAberto(true);
   };
 
-  const handleSalvar = (data: Omit<Tarefa, 'id' | 'createdAt' | 'updatedAt'>) => {
-    if (tarefaEditando) {
-      updateTarefa(tarefaEditando.id, data);
-      toast.success('Tarefa atualizada com sucesso!');
-    } else {
-      createTarefa(data);
-      toast.success('Tarefa criada com sucesso!');
+  const handleSalvar = async (data: Omit<Tarefa, 'id' | 'createdAt' | 'updatedAt'>) => {
+    try {
+      if (tarefaEditando) {
+        await updateTarefa(tarefaEditando.id, data);
+        toast.success('Tarefa atualizada com sucesso!');
+      } else {
+        await createTarefa(data);
+        toast.success('Tarefa criada com sucesso!');
+      }
+      // Recarregar a lista de tarefas
+      const response = await getTarefasByHabito(habitoId);
+      setTarefas(response.data || []);
+      onRefresh();
+    } catch (error) {
+      console.error('Erro ao salvar tarefa:', error);
+      toast.error('Erro ao salvar tarefa');
     }
-    onRefresh();
   };
 
   const handleDeletar = (id: string) => {
@@ -80,11 +106,19 @@ export function TarefasTable({ objetivoId, habitoId, onRefresh }: TarefasTablePr
     setDeleteDialogAberto(true);
   };
 
-  const confirmarDeletar = () => {
+  const confirmarDeletar = async () => {
     if (tarefaParaDeletar) {
-      deleteTarefa(tarefaParaDeletar);
-      toast.success('Tarefa excluída com sucesso!');
-      onRefresh();
+      try {
+        await deleteTarefa(tarefaParaDeletar);
+        toast.success('Tarefa excluída com sucesso!');
+        // Recarregar a lista de tarefas
+        const response = await getTarefasByHabito(habitoId);
+        setTarefas(response.data || []);
+        onRefresh();
+      } catch (error) {
+        console.error('Erro ao deletar tarefa:', error);
+        toast.error('Erro ao excluir tarefa');
+      }
     }
     setDeleteDialogAberto(false);
     setTarefaParaDeletar(null);
@@ -127,6 +161,14 @@ export function TarefasTable({ objetivoId, habitoId, onRefresh }: TarefasTablePr
     if (!prazo) return false;
     return new Date(prazo) < new Date();
   };
+
+  if (loading) {
+    return (
+      <div className="border rounded-lg p-8 text-center text-gray-500">
+        Carregando tarefas...
+      </div>
+    );
+  }
 
   if (tarefas.length === 0) {
     return (

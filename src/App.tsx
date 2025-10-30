@@ -1,12 +1,35 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
 import { LayoutList, LayoutGrid } from 'lucide-react';
 import { ObjetivosView } from './components/objetivos-view';
 import { KanbanGlobal } from './components/kanban-global';
+import { ApiTestComponent } from './components/api-test';
 import { Toaster } from './components/ui/sonner';
+import { initializeAuth } from './lib/api';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('hierarquica');
+  const [authInitialized, setAuthInitialized] = useState(false);
+
+  // Inicializar autenticação quando a aplicação carregar
+  useEffect(() => {
+    const init = async () => {
+      await initializeAuth();
+      setAuthInitialized(true);
+    };
+    init();
+  }, []);
+
+  if (!authInitialized) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto mb-4"></div>
+          <p className="text-gray-600">Inicializando autenticação...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -23,7 +46,7 @@ export default function App() {
 
           {/* Navegação entre Visões */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full max-w-md grid-cols-2">
+            <TabsList className="grid w-full max-w-2xl grid-cols-3">
               <TabsTrigger value="hierarquica" className="flex items-center gap-2">
                 <LayoutList className="h-4 w-4" />
                 Visão Hierárquica
@@ -31,6 +54,9 @@ export default function App() {
               <TabsTrigger value="kanban" className="flex items-center gap-2">
                 <LayoutGrid className="h-4 w-4" />
                 Kanban Global
+              </TabsTrigger>
+              <TabsTrigger value="api-test" className="flex items-center gap-2">
+                🧪 Teste API
               </TabsTrigger>
             </TabsList>
 
@@ -61,6 +87,21 @@ export default function App() {
                   </ul>
                 </div>
                 <KanbanGlobal />
+              </div>
+            </TabsContent>
+
+            <TabsContent value="api-test" className="mt-6">
+              <div className="space-y-4">
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <h3 className="font-medium text-yellow-900 mb-2">🧪 Teste de API</h3>
+                  <ul className="text-sm text-yellow-800 space-y-1">
+                    <li>• Teste as chamadas HTTP para o backend</li>
+                    <li>• Verifica se o token de autenticação está sendo enviado</li>
+                    <li>• Monitore os logs do backend para confirmar recebimento</li>
+                    <li>• User ID fixo: {import.meta.env.VITE_USER_ID}</li>
+                  </ul>
+                </div>
+                <ApiTestComponent />
               </div>
             </TabsContent>
           </Tabs>

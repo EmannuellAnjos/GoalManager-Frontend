@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { ChevronDown, ChevronRight, Plus, Edit, Trash2, Search, Filter, MoreVertical, CheckCircle2 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -49,7 +49,7 @@ import {
 } from '../lib/api';
 import { ObjetivoDialog } from './objetivo-dialog';
 import { HabitosExpandedRow } from './habitos-expanded-row';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 export function ObjetivosView() {
   const [expandedObjetivos, setExpandedObjetivos] = useState<Set<string>>(new Set());
@@ -67,11 +67,55 @@ export function ObjetivosView() {
   const [objetivoEditando, setObjetivoEditando] = useState<Objetivo | undefined>();
   const [deleteDialogAberto, setDeleteDialogAberto] = useState(false);
   const [objetivoParaDeletar, setObjetivoParaDeletar] = useState<string | null>(null);
-  const [, setRefresh] = useState(0);
+  
+  // Estados para dados assíncronos
+  const [objetivos, setObjetivos] = useState<Objetivo[]>([]);
+  const [habitos, setHabitos] = useState<Habito[]>([]);
+  const [tarefas, setTarefas] = useState<Tarefa[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const objetivos = getObjetivos();
-  const habitos = getHabitos();
-  const tarefas = getTarefas();
+  // Carregar dados iniciais
+  useEffect(() => {
+    const carregarDados = async () => {
+      try {
+        setLoading(true);
+        const [objetivosResponse, habitosResponse, tarefasResponse] = await Promise.all([
+          getObjetivos(),
+          getHabitos(),
+          getTarefas(),
+        ]);
+        
+        setObjetivos(objetivosResponse.data);
+        setHabitos(habitosResponse.data);
+        setTarefas(tarefasResponse.data);
+      } catch (error) {
+        console.error('Erro ao carregar dados:', error);
+        toast.error('Erro ao carregar dados');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    carregarDados();
+  }, []);
+
+  // Função para recarregar dados (usada por componentes filhos)
+  const recarregarDados = async () => {
+    try {
+      const [objetivosResponse, habitosResponse, tarefasResponse] = await Promise.all([
+        getObjetivos(),
+        getHabitos(),
+        getTarefas(),
+      ]);
+      
+      setObjetivos(objetivosResponse.data);
+      setHabitos(habitosResponse.data);
+      setTarefas(tarefasResponse.data);
+    } catch (error) {
+      console.error('Erro ao recarregar dados:', error);
+      toast.error('Erro ao recarregar dados');
+    }
+  };
 
   const objetivosFiltrados = useMemo(() => {
     let resultado = [...objetivos];
@@ -152,15 +196,23 @@ export function ObjetivosView() {
     setDialogAberto(true);
   };
 
-  const handleSalvar = (data: Omit<Objetivo, 'id' | 'createdAt' | 'updatedAt' | 'progresso'>) => {
-    if (objetivoEditando) {
-      updateObjetivo(objetivoEditando.id, data);
-      toast.success('Objetivo atualizado com sucesso!');
-    } else {
-      createObjetivo({ ...data, progresso: 0 });
-      toast.success('Objetivo criado com sucesso!');
+  const handleSalvar = async (data: Omit<Objetivo, 'id' | 'createdAt' | 'updatedAt' | 'progresso'>) => {
+    try {
+      if (objetivoEditando) {
+        const response = await updateObjetivo(objetivoEditando.id, data);
+        setObjetivos(prev => prev.map(obj => 
+          obj.id === objetivoEditando.id ? response.data : obj
+        ));
+        toast.success('Objetivo atualizado com sucesso!');
+      } else {
+        const response = await createObjetivo({ ...data, progresso: 0 });
+        setObjetivos(prev => [...prev, response.data]);
+        toast.success('Objetivo criado com sucesso!');
+      }
+    } catch (error) {
+      console.error('Erro ao salvar objetivo:', error);
+      toast.error('Erro ao salvar objetivo');
     }
-    setRefresh((r) => r + 1);
   };
 
   const handleDeletar = (id: string) => {
@@ -168,21 +220,32 @@ export function ObjetivosView() {
     setDeleteDialogAberto(true);
   };
 
-  const confirmarDeletar = () => {
+  const confirmarDeletar = async () => {
     if (objetivoParaDeletar) {
-      deleteObjetivo(objetivoParaDeletar);
-      toast.success('Objetivo excluído com sucesso!');
-      setRefresh((r) => r + 1);
+      try {
+        await deleteObjetivo(objetivoParaDeletar);
+        setObjetivos(prev => prev.filter(obj => obj.id !== objetivoParaDeletar));
+        toast.success('Objetivo excluído com sucesso!');
+      } catch (error) {
+        console.error('Erro ao deletar objetivo:', error);
+        toast.error('Erro ao excluir objetivo');
+      }
     }
     setDeleteDialogAberto(false);
     setObjetivoParaDeletar(null);
   };
 
-  const handleDeletarSelecionados = () => {
-    const count = deleteObjetivos(Array.from(selectedObjetivos));
-    toast.success(`${count} objetivo(s) excluído(s) com sucesso!`);
-    setSelectedObjetivos(new Set());
-    setRefresh((r) => r + 1);
+  const handleDeletarSelecionados = async () => {
+    try {
+      const idsArray = Array.from(selectedObjetivos);
+      const result = await deleteObjetivos(idsArray);
+      setObjetivos(prev => prev.filter(obj => !selectedObjetivos.has(obj.id)));
+      toast.success(`${result.deletedCount} objetivo(s) excluído(s) com sucesso!`);
+      setSelectedObjetivos(new Set());
+    } catch (error) {
+      console.error('Erro ao deletar objetivos selecionados:', error);
+      toast.error('Erro ao excluir objetivos selecionados');
+    }
   };
 
   const getStatusBadge = (status: StatusObjetivo) => {
@@ -200,6 +263,17 @@ export function ObjetivosView() {
     };
     return <Badge className={variants[status]}>{labels[status]}</Badge>;
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto mb-4"></div>
+          <p className="text-gray-600">Carregando objetivos...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -357,7 +431,7 @@ export function ObjetivosView() {
                       <TableCell colSpan={7} className="bg-gray-50 p-0">
                         <HabitosExpandedRow 
                           objetivoId={objetivo.id} 
-                          onRefresh={() => setRefresh((r) => r + 1)}
+                          onRefresh={recarregarDados}
                         />
                       </TableCell>
                     </TableRow>

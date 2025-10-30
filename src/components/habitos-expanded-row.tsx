@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { ChevronDown, ChevronRight, Plus, Edit, Trash2, MoreVertical, CheckCircle2, RotateCcw } from 'lucide-react';
 import { Button } from './ui/button';
 import { Progress } from './ui/progress';
@@ -42,7 +42,7 @@ import {
 } from '../lib/api';
 import { HabitoDialog } from './habito-dialog';
 import { TarefasExpandedRow } from './tarefas-expanded-row';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 
 interface HabitosExpandedRowProps {
   objetivoId: string;
@@ -56,8 +56,26 @@ export function HabitosExpandedRow({ objetivoId, onRefresh }: HabitosExpandedRow
   const [habitoEditando, setHabitoEditando] = useState<Habito | undefined>();
   const [deleteDialogAberto, setDeleteDialogAberto] = useState(false);
   const [habitoParaDeletar, setHabitoParaDeletar] = useState<string | null>(null);
+  const [habitos, setHabitos] = useState<Habito[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const habitos = getHabitosByObjetivo(objetivoId);
+  // Carregar hábitos quando o componente montar ou objetivoId mudar
+  useEffect(() => {
+    const carregarHabitos = async () => {
+      try {
+        setLoading(true);
+        const response = await getHabitosByObjetivo(objetivoId);
+        setHabitos(response.data || []);
+      } catch (error) {
+        console.error('Erro ao carregar hábitos:', error);
+        setHabitos([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    carregarHabitos();
+  }, [objetivoId]);
 
   const toggleExpanded = (id: string) => {
     const newSet = new Set(expandedHabitos);
@@ -89,15 +107,23 @@ export function HabitosExpandedRow({ objetivoId, onRefresh }: HabitosExpandedRow
     setDialogAberto(true);
   };
 
-  const handleSalvar = (data: Omit<Habito, 'id' | 'createdAt' | 'updatedAt' | 'progresso'>) => {
-    if (habitoEditando) {
-      updateHabito(habitoEditando.id, data);
-      toast.success('Hábito atualizado com sucesso!');
-    } else {
-      createHabito({ ...data, progresso: 0 });
-      toast.success('Hábito criado com sucesso!');
+  const handleSalvar = async (data: Omit<Habito, 'id' | 'createdAt' | 'updatedAt' | 'progresso'>) => {
+    try {
+      if (habitoEditando) {
+        await updateHabito(habitoEditando.id, data);
+        toast.success('Hábito atualizado com sucesso!');
+      } else {
+        await createHabito({ ...data, progresso: 0 });
+        toast.success('Hábito criado com sucesso!');
+      }
+      // Recarregar a lista de hábitos
+      const response = await getHabitosByObjetivo(objetivoId);
+      setHabitos(response.data || []);
+      onRefresh();
+    } catch (error) {
+      console.error('Erro ao salvar hábito:', error);
+      toast.error('Erro ao salvar hábito');
     }
-    onRefresh();
   };
 
   const handleDeletar = (id: string) => {
@@ -105,26 +131,50 @@ export function HabitosExpandedRow({ objetivoId, onRefresh }: HabitosExpandedRow
     setDeleteDialogAberto(true);
   };
 
-  const confirmarDeletar = () => {
+  const confirmarDeletar = async () => {
     if (habitoParaDeletar) {
-      deleteHabito(habitoParaDeletar);
-      toast.success('Hábito excluído com sucesso!');
-      onRefresh();
+      try {
+        await deleteHabito(habitoParaDeletar);
+        toast.success('Hábito excluído com sucesso!');
+        // Recarregar a lista de hábitos
+        const response = await getHabitosByObjetivo(objetivoId);
+        setHabitos(response.data || []);
+        onRefresh();
+      } catch (error) {
+        console.error('Erro ao deletar hábito:', error);
+        toast.error('Erro ao excluir hábito');
+      }
     }
     setDeleteDialogAberto(false);
     setHabitoParaDeletar(null);
   };
 
-  const handleMarcarFeito = (id: string) => {
-    marcarHabitoFeito(id);
-    toast.success('Hábito marcado como feito!');
-    onRefresh();
+  const handleMarcarFeito = async (id: string) => {
+    try {
+      await marcarHabitoFeito(id);
+      toast.success('Hábito marcado como feito!');
+      // Recarregar a lista de hábitos
+      const response = await getHabitosByObjetivo(objetivoId);
+      setHabitos(response.data || []);
+      onRefresh();
+    } catch (error) {
+      console.error('Erro ao marcar hábito como feito:', error);
+      toast.error('Erro ao marcar hábito como feito');
+    }
   };
 
-  const handleResetarCiclo = (id: string) => {
-    resetarHabitoCiclo(id);
-    toast.success('Ciclo do hábito resetado!');
-    onRefresh();
+  const handleResetarCiclo = async (id: string) => {
+    try {
+      await resetarHabitoCiclo(id);
+      toast.success('Ciclo do hábito resetado!');
+      // Recarregar a lista de hábitos
+      const response = await getHabitosByObjetivo(objetivoId);
+      setHabitos(response.data || []);
+      onRefresh();
+    } catch (error) {
+      console.error('Erro ao resetar ciclo do hábito:', error);
+      toast.error('Erro ao resetar ciclo do hábito');
+    }
   };
 
   const getStatusBadge = (status: StatusHabito) => {
@@ -149,6 +199,14 @@ export function HabitosExpandedRow({ objetivoId, onRefresh }: HabitosExpandedRow
     };
     return labels[frequencia] || frequencia;
   };
+
+  if (loading) {
+    return (
+      <div className="p-8 text-center">
+        <p className="text-gray-500">Carregando hábitos...</p>
+      </div>
+    );
+  }
 
   if (habitos.length === 0) {
     return (

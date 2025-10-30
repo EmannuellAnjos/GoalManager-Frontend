@@ -69,3 +69,57 @@ export interface Paginacao {
   itensPorPagina: number;
   total: number;
 }
+
+// Tipos de resposta da API
+export interface ApiResponse<T> {
+  data: T;
+  pagination?: ApiPagination;
+}
+
+export interface ApiPagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  hasNext: boolean;
+  hasPrev: boolean;
+}
+
+export interface ApiError {
+  error: {
+    code: string;
+    message: string;
+    details?: Array<{
+      field: string;
+      message: string;
+    }>;
+  };
+}
+
+export interface DashboardData {
+  totalObjetivos: number;
+  objetivosAtivos: number;
+  totalHabitos: number;
+  habitosAtivos: number;
+  totalTarefas: number;
+  tarefasConcluidas: number;
+  progressoGeral: number;
+}
+
+// Parâmetros de query para filtros
+export interface QueryParams {
+  busca?: string;
+  status?: string[];
+  inicio?: string;
+  fim?: string;
+  orderBy?: string;
+  orderDir?: 'asc' | 'desc';
+  page?: number;
+  limit?: number;
+  objetivoId?: string;
+  habitoId?: string;
+  prioridade?: string[];
+  frequencia?: string[];
+  prazoInicio?: string;
+  prazoFim?: string;
+}

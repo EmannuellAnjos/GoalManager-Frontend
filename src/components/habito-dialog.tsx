@@ -27,7 +27,28 @@ export function HabitoDialog({ open, onOpenChange, habito, objetivoIdPadrao, onS
     status: 'ativo',
   });
 
-  const objetivos = getObjetivos();
+  const [objetivos, setObjetivos] = useState<any[]>([]);
+  const [loadingObjetivos, setLoadingObjetivos] = useState(true);
+
+  // Carregar objetivos quando o diálogo abrir
+  useEffect(() => {
+    const carregarObjetivos = async () => {
+      if (!open) return;
+      
+      try {
+        setLoadingObjetivos(true);
+        const response = await getObjetivos();
+        setObjetivos(response.data || []);
+      } catch (error) {
+        console.error('Erro ao carregar objetivos:', error);
+        setObjetivos([]);
+      } finally {
+        setLoadingObjetivos(false);
+      }
+    };
+
+    carregarObjetivos();
+  }, [open]);
 
   useEffect(() => {
     if (habito) {
@@ -76,17 +97,29 @@ export function HabitoDialog({ open, onOpenChange, habito, objetivoIdPadrao, onS
               <Label htmlFor="objetivoId">Objetivo *</Label>
               <Select
                 value={formData.objetivoId}
-                onValueChange={(value) => setFormData({ ...formData, objetivoId: value })}
+                onValueChange={(value: string) => setFormData({ ...formData, objetivoId: value })}
               >
                 <SelectTrigger id="objetivoId">
-                  <SelectValue placeholder="Selecione um objetivo" />
+                  <SelectValue 
+                    placeholder={loadingObjetivos ? "Carregando objetivos..." : "Selecione um objetivo"} 
+                  />
                 </SelectTrigger>
                 <SelectContent>
-                  {objetivos.map((obj) => (
-                    <SelectItem key={obj.id} value={obj.id}>
-                      {obj.titulo}
+                  {loadingObjetivos ? (
+                    <SelectItem value="" disabled>
+                      Carregando...
                     </SelectItem>
-                  ))}
+                  ) : objetivos.length === 0 ? (
+                    <SelectItem value="" disabled>
+                      Nenhum objetivo encontrado
+                    </SelectItem>
+                  ) : (
+                    objetivos.map((obj) => (
+                      <SelectItem key={obj.id} value={obj.id}>
+                        {obj.titulo}
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
             </div>
