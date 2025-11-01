@@ -106,11 +106,11 @@ export function HabitoDialog({ open, onOpenChange, habito, objetivoIdPadrao, onS
                 </SelectTrigger>
                 <SelectContent>
                   {loadingObjetivos ? (
-                    <SelectItem value="" disabled>
+                    <SelectItem value="loading" disabled>
                       Carregando...
                     </SelectItem>
                   ) : objetivos.length === 0 ? (
-                    <SelectItem value="" disabled>
+                    <SelectItem value="empty" disabled>
                       Nenhum objetivo encontrado
                     </SelectItem>
                   ) : (

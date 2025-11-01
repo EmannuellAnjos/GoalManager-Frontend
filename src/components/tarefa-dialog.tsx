@@ -48,6 +48,18 @@ export function TarefaDialog({
     ? habitos.filter(h => h.objetivoId === formData.objetivoId)
     : habitos;
 
+  // Debug logs
+  console.log('TarefaDialog Debug:', {
+    open,
+    objetivoIdPadrao,
+    habitoIdPadrao,
+    formDataObjetivoId: formData.objetivoId,
+    formDataHabitoId: formData.habitoId,
+    totalHabitos: habitos.length,
+    habitosFiltrados: habitosFiltrados.length,
+    habitosFiltradosData: habitosFiltrados
+  });
+
   // Carregar dados quando o dialog abrir
   useEffect(() => {
     if (open) {
@@ -73,34 +85,37 @@ export function TarefaDialog({
   }, [open]);
 
   useEffect(() => {
-    if (tarefa) {
-      setFormData({
-        objetivoId: tarefa.objetivoId || '',
-        habitoId: tarefa.habitoId || '',
-        titulo: tarefa.titulo,
-        descricao: tarefa.descricao || '',
-        prioridade: tarefa.prioridade || 'media',
-        status: tarefa.status,
-        estimativaHoras: tarefa.estimativaHoras,
-        horasGastas: tarefa.horasGastas,
-        prazo: tarefa.prazo || '',
-        progresso: tarefa.progresso,
-      });
-    } else {
-      setFormData({
-        objetivoId: objetivoIdPadrao || '',
-        habitoId: habitoIdPadrao || '',
-        titulo: '',
-        descricao: '',
-        prioridade: 'media',
-        status: 'backlog',
-        estimativaHoras: undefined,
-        horasGastas: undefined,
-        prazo: '',
-        progresso: 0,
-      });
+    if (open && !loading) {  // Só inicializa depois que os dados carregaram
+      if (tarefa) {
+        setFormData({
+          objetivoId: tarefa.objetivoId || '',
+          habitoId: tarefa.habitoId || '',
+          titulo: tarefa.titulo,
+          descricao: tarefa.descricao || '',
+          prioridade: tarefa.prioridade || 'media',
+          status: tarefa.status,
+          estimativaHoras: tarefa.estimativaHoras,
+          horasGastas: tarefa.horasGastas,
+          prazo: tarefa.prazo || '',
+          progresso: tarefa.progresso,
+        });
+      } else {
+        setFormData({
+          objetivoId: objetivoIdPadrao || '',
+          habitoId: habitoIdPadrao || '',
+          titulo: '',
+          descricao: '',
+          prioridade: 'media',
+          status: 'backlog',
+          estimativaHoras: undefined,
+          horasGastas: undefined,
+          prazo: '',
+          progresso: 0,
+        });
+      }
+      console.log('FormData inicializado:', { objetivoIdPadrao, habitoIdPadrao });
     }
-  }, [tarefa, open, objetivoIdPadrao, habitoIdPadrao]);
+  }, [tarefa, open, objetivoIdPadrao, habitoIdPadrao, loading]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

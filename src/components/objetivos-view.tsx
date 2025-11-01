@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { ChevronDown, ChevronRight, Plus, Edit, Trash2, Search, Filter, MoreVertical, CheckCircle2 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -358,8 +358,8 @@ export function ObjetivosView() {
               </TableRow>
             ) : (
               objetivosPaginados.map((objetivo) => (
-                <>
-                  <TableRow key={objetivo.id}>
+                <React.Fragment key={objetivo.id}>
+                  <TableRow>
                     <TableCell>
                       <Checkbox
                         checked={selectedObjetivos.has(objetivo.id)}
@@ -436,7 +436,7 @@ export function ObjetivosView() {
                       </TableCell>
                     </TableRow>
                   )}
-                </>
+                </React.Fragment>
               ))
             )}
           </TableBody>

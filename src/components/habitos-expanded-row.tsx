@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { ChevronDown, ChevronRight, Plus, Edit, Trash2, MoreVertical, CheckCircle2, RotateCcw } from 'lucide-react';
 import { Button } from './ui/button';
 import { Progress } from './ui/progress';
@@ -264,8 +264,8 @@ export function HabitosExpandedRow({ objetivoId, onRefresh }: HabitosExpandedRow
           </TableHeader>
           <TableBody>
             {habitos.map((habito) => (
-              <>
-                <TableRow key={habito.id}>
+              <React.Fragment key={habito.id}>
+                <TableRow>
                   <TableCell>
                     <Checkbox
                       checked={selectedHabitos.has(habito.id)}
@@ -362,7 +362,7 @@ export function HabitosExpandedRow({ objetivoId, onRefresh }: HabitosExpandedRow
                     </TableCell>
                   </TableRow>
                 )}
-              </>
+              </React.Fragment>
             ))}
           </TableBody>
         </Table>

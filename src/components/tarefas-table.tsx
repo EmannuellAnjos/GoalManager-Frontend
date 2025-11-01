@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Edit, Trash2, MoreVertical, AlertCircle } from 'lucide-react';
+import { Edit, Trash2, MoreVertical, AlertCircle, Plus } from 'lucide-react';
 import { Button } from './ui/button';
 import { Progress } from './ui/progress';
 import { Checkbox } from './ui/checkbox';
@@ -79,6 +79,11 @@ export function TarefasTable({ objetivoId, habitoId, onRefresh }: TarefasTablePr
 
   const handleEditar = (tarefa: Tarefa) => {
     setTarefaEditando(tarefa);
+    setDialogAberto(true);
+  };
+
+  const handleCriar = () => {
+    setTarefaEditando(undefined);
     setDialogAberto(true);
   };
 
@@ -180,6 +185,14 @@ export function TarefasTable({ objetivoId, habitoId, onRefresh }: TarefasTablePr
 
   return (
     <>
+      <div className="flex items-center justify-between mb-4">
+        <h4 className="font-medium">Tarefas do Hábito</h4>
+        <Button onClick={handleCriar} size="sm">
+          <Plus className="h-4 w-4 mr-2" />
+          Adicionar Tarefa
+        </Button>
+      </div>
+
       <div className="border rounded-lg">
         <Table>
           <TableHeader>

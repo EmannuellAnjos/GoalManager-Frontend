@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
-import { Edit, AlertCircle, Clock, Search, Filter, Plus } from 'lucide-react';
+import { Edit, AlertCircle, Clock, Search, Filter, Plus, MoreVertical, Trash2 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Badge } from './ui/badge';
@@ -14,8 +14,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from './ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from './ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from './ui/alert-dialog';
 import { Tarefa, StatusTarefa, Prioridade, Objetivo, Habito } from '../lib/types';
-import { getTarefas, updateTarefa, getObjetivos, getHabitos, createTarefa } from '../lib/api';
+import { getTarefas, updateTarefa, getObjetivos, getHabitos, createTarefa, deleteTarefa } from '../lib/api';
 import { TarefaDialog } from './tarefa-dialog';
 import { toast } from 'sonner';
 
@@ -35,6 +52,8 @@ export function KanbanGlobal() {
   const [filtroPrazo, setFiltroPrazo] = useState<string>('todos');
   const [tarefaEditando, setTarefaEditando] = useState<Tarefa | undefined>();
   const [dialogAberto, setDialogAberto] = useState(false);
+  const [deleteDialogAberto, setDeleteDialogAberto] = useState(false);
+  const [tarefaParaDeletar, setTarefaParaDeletar] = useState<string | null>(null);
   
   // Estados para dados assíncronos
   const [tarefas, setTarefas] = useState<Tarefa[]>([]);
@@ -146,8 +165,30 @@ export function KanbanGlobal() {
   };
 
   const handleEditar = (tarefa: Tarefa) => {
+    console.log('✏️ Clicou em editar tarefa:', tarefa.titulo);
     setTarefaEditando(tarefa);
     setDialogAberto(true);
+  };
+
+  const handleDeletar = (tarefaId: string) => {
+    console.log('🗑️ Clicou em deletar tarefa:', tarefaId);
+    setTarefaParaDeletar(tarefaId);
+    setDeleteDialogAberto(true);
+  };
+
+  const confirmarDeletar = async () => {
+    if (tarefaParaDeletar) {
+      try {
+        await deleteTarefa(tarefaParaDeletar);
+        setTarefas(prev => prev.filter(t => t.id !== tarefaParaDeletar));
+        toast.success('Tarefa excluída com sucesso!');
+      } catch (error) {
+        console.error('Erro ao excluir tarefa:', error);
+        toast.error('Erro ao excluir tarefa');
+      }
+    }
+    setDeleteDialogAberto(false);
+    setTarefaParaDeletar(null);
   };
 
   const handleCriar = () => {
@@ -294,6 +335,7 @@ export function KanbanGlobal() {
               tarefas={tarefasFiltradas.filter((t) => t.status === coluna.id)}
               onDrop={handleDrop}
               onEdit={handleEditar}
+              onDelete={handleDeletar}
               objetivos={objetivos}
               habitos={habitos}
             />
@@ -308,6 +350,24 @@ export function KanbanGlobal() {
         tarefa={tarefaEditando}
         onSave={handleSalvar}
       />
+
+      {/* Dialog de Confirmação de Exclusão */}
+      <AlertDialog open={deleteDialogAberto} onOpenChange={setDeleteDialogAberto}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir esta tarefa? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmarDeletar} className="bg-red-600 hover:bg-red-700">
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -317,11 +377,12 @@ interface KanbanColumnProps {
   tarefas: Tarefa[];
   onDrop: (tarefaId: string, status: StatusTarefa) => void;
   onEdit: (tarefa: Tarefa) => void;
+  onDelete: (tarefaId: string) => void;
   objetivos: any[];
   habitos: any[];
 }
 
-function KanbanColumn({ coluna, tarefas, onDrop, onEdit, objetivos, habitos }: KanbanColumnProps) {
+function KanbanColumn({ coluna, tarefas, onDrop, onEdit, onDelete, objetivos, habitos }: KanbanColumnProps) {
   const [{ isOver }, drop] = useDrop(() => ({
     accept: 'TAREFA',
     drop: (item: { id: string }) => onDrop(item.id, coluna.id),
@@ -332,7 +393,7 @@ function KanbanColumn({ coluna, tarefas, onDrop, onEdit, objetivos, habitos }: K
 
   return (
     <div
-      ref={drop}
+      ref={drop as any}
       className={`flex-shrink-0 w-80 bg-gray-50 rounded-lg p-4 ${
         isOver ? 'ring-2 ring-blue-500' : ''
       }`}
@@ -352,6 +413,7 @@ function KanbanColumn({ coluna, tarefas, onDrop, onEdit, objetivos, habitos }: K
               key={tarefa.id}
               tarefa={tarefa}
               onEdit={onEdit}
+              onDelete={onDelete}
               objetivos={objetivos}
               habitos={habitos}
             />
@@ -365,11 +427,12 @@ function KanbanColumn({ coluna, tarefas, onDrop, onEdit, objetivos, habitos }: K
 interface TarefaCardProps {
   tarefa: Tarefa;
   onEdit: (tarefa: Tarefa) => void;
+  onDelete: (tarefaId: string) => void;
   objetivos: any[];
   habitos: any[];
 }
 
-function TarefaCard({ tarefa, onEdit, objetivos, habitos }: TarefaCardProps) {
+function TarefaCard({ tarefa, onEdit, onDelete, objetivos, habitos }: TarefaCardProps) {
   const [{ isDragging }, drag] = useDrag(() => ({
     type: 'TAREFA',
     item: { id: tarefa.id },
@@ -398,7 +461,7 @@ function TarefaCard({ tarefa, onEdit, objetivos, habitos }: TarefaCardProps) {
 
   return (
     <Card
-      ref={drag}
+      ref={drag as any}
       className={`p-4 cursor-move border-l-4 ${getPrioridadeCor(tarefa.prioridade)} ${
         isDragging ? 'opacity-50' : ''
       } hover:shadow-md transition-shadow`}
@@ -406,9 +469,33 @@ function TarefaCard({ tarefa, onEdit, objetivos, habitos }: TarefaCardProps) {
       <div className="space-y-3">
         <div className="flex items-start justify-between gap-2">
           <h5 className="flex-1">{tarefa.titulo}</h5>
-          <Button variant="ghost" size="sm" onClick={() => onEdit(tarefa)} className="h-7 w-7 p-0">
-            <Edit className="h-4 w-4" />
-          </Button>
+          <DropdownMenu onOpenChange={(open: boolean) => open && console.log('🎯 GLOBAL: Menu abriu!')}>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => {
+                console.log('✏️ GLOBAL: Clicou em EDITAR');
+                onEdit(tarefa);
+              }}>
+                <Edit className="h-4 w-4 mr-2" />
+                Editar
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => {
+                  console.log('🗑️ GLOBAL: Clicou em EXCLUIR');
+                  onDelete(tarefa.id);
+                }}
+                className="text-red-600"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Excluir
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         {tarefa.descricao && (
