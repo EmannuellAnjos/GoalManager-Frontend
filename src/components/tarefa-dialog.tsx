@@ -5,16 +5,16 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Tarefa, StatusTarefa, Prioridade, Objetivo, Habito } from '../lib/types';
-import { getObjetivos, getHabitos } from '../lib/api';
+import { Tarefa, StatusTarefa, Prioridade, Habito } from '../lib/types';
+import { getHabitos } from '../lib/api';
 import { Slider } from './ui/slider';
+import { toast } from 'sonner';
 
 interface TarefaDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   tarefa?: Tarefa;
-  objetivoIdPadrao?: string;
-  habitoIdPadrao?: string;
+  habitoIdPadrao?: string; // Hábito padrão (obrigatório ao criar nova tarefa)
   onSave: (data: Omit<Tarefa, 'id' | 'createdAt' | 'updatedAt'>) => void;
 }
 
@@ -22,12 +22,10 @@ export function TarefaDialog({
   open, 
   onOpenChange, 
   tarefa, 
-  objetivoIdPadrao, 
   habitoIdPadrao, 
   onSave 
 }: TarefaDialogProps) {
   const [formData, setFormData] = useState<Omit<Tarefa, 'id' | 'createdAt' | 'updatedAt'>>({
-    objetivoId: objetivoIdPadrao || '',
     habitoId: habitoIdPadrao || '',
     titulo: '',
     descricao: '',
@@ -40,68 +38,92 @@ export function TarefaDialog({
   });
 
   // Estados para dados assíncronos
-  const [objetivos, setObjetivos] = useState<Objetivo[]>([]);
   const [habitos, setHabitos] = useState<Habito[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const habitosFiltrados = formData.objetivoId 
-    ? habitos.filter(h => h.objetivoId === formData.objetivoId)
-    : habitos;
-
-  // Debug logs
-  console.log('TarefaDialog Debug:', {
-    open,
-    objetivoIdPadrao,
-    habitoIdPadrao,
-    formDataObjetivoId: formData.objetivoId,
-    formDataHabitoId: formData.habitoId,
-    totalHabitos: habitos.length,
-    habitosFiltrados: habitosFiltrados.length,
-    habitosFiltradosData: habitosFiltrados
-  });
-
-  // Carregar dados quando o dialog abrir
+  // Carregar hábitos quando o dialog abrir
   useEffect(() => {
     if (open) {
-      const carregarDados = async () => {
+      const carregarHabitos = async () => {
         try {
           setLoading(true);
-          const [objetivosResponse, habitosResponse] = await Promise.all([
-            getObjetivos(),
-            getHabitos(),
-          ]);
-          
-          setObjetivos(objetivosResponse.data);
+          // Resetar formData enquanto carrega, mas manter habitoIdPadrao se fornecido
+          setFormData({
+            habitoId: habitoIdPadrao || '',
+            titulo: '',
+            descricao: '',
+            prioridade: 'media',
+            status: 'backlog',
+            estimativaHoras: undefined,
+            horasGastas: undefined,
+            prazo: '',
+            progresso: 0,
+          });
+          const habitosResponse = await getHabitos();
           setHabitos(habitosResponse.data);
         } catch (error) {
-          console.error('Erro ao carregar dados:', error);
+          console.error('Erro ao carregar hábitos:', error);
+          toast.error('Erro ao carregar hábitos');
         } finally {
           setLoading(false);
         }
       };
 
-      carregarDados();
+      carregarHabitos();
+    } else {
+      // Limpar estados quando dialog fecha
+      setFormData({
+        habitoId: '',
+        titulo: '',
+        descricao: '',
+        prioridade: 'media',
+        status: 'backlog',
+        estimativaHoras: undefined,
+        horasGastas: undefined,
+        prazo: '',
+        progresso: 0,
+      });
+      setHabitos([]);
     }
-  }, [open]);
+  }, [open, habitoIdPadrao]);
 
+  // Preencher formData apenas após hábitos serem carregados
   useEffect(() => {
-    if (open && !loading) {  // Só inicializa depois que os dados carregaram
+    if (open && !loading) {
       if (tarefa) {
+        // Converter estimativaHoras e horasGastas garantindo que 0 seja preservado
+        // Se o valor for 0, false, null, undefined ou string vazia, manter undefined
+        // Caso contrário, converter para número
+        let estimativaHoras: number | undefined;
+        if (tarefa.estimativaHoras !== null && tarefa.estimativaHoras !== undefined && tarefa.estimativaHoras !== '') {
+          const valor = typeof tarefa.estimativaHoras === 'string' ? parseFloat(tarefa.estimativaHoras) : Number(tarefa.estimativaHoras);
+          estimativaHoras = !isNaN(valor) ? valor : undefined;
+        } else {
+          estimativaHoras = undefined;
+        }
+        
+        let horasGastas: number | undefined;
+        if (tarefa.horasGastas !== null && tarefa.horasGastas !== undefined && tarefa.horasGastas !== '') {
+          const valor = typeof tarefa.horasGastas === 'string' ? parseFloat(tarefa.horasGastas) : Number(tarefa.horasGastas);
+          horasGastas = !isNaN(valor) ? valor : undefined;
+        } else {
+          horasGastas = undefined;
+        }
+        
         setFormData({
-          objetivoId: tarefa.objetivoId || '',
-          habitoId: tarefa.habitoId || '',
+          habitoId: tarefa.habitoId,
           titulo: tarefa.titulo,
           descricao: tarefa.descricao || '',
           prioridade: tarefa.prioridade || 'media',
           status: tarefa.status,
-          estimativaHoras: tarefa.estimativaHoras,
-          horasGastas: tarefa.horasGastas,
+          estimativaHoras: estimativaHoras,
+          horasGastas: horasGastas,
           prazo: tarefa.prazo || '',
           progresso: tarefa.progresso,
         });
       } else {
+        // Para nova tarefa, usar habitoIdPadrao se fornecido
         setFormData({
-          objetivoId: objetivoIdPadrao || '',
           habitoId: habitoIdPadrao || '',
           titulo: '',
           descricao: '',
@@ -113,22 +135,40 @@ export function TarefaDialog({
           progresso: 0,
         });
       }
-      console.log('FormData inicializado:', { objetivoIdPadrao, habitoIdPadrao });
     }
-  }, [tarefa, open, objetivoIdPadrao, habitoIdPadrao, loading]);
+  }, [tarefa?.id, open, habitoIdPadrao, loading]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.titulo.trim()) return;
     
-    onSave({
+    // Validação obrigatória
+    if (!formData.titulo.trim()) {
+      toast.error('Título é obrigatório');
+      return;
+    }
+    
+    // Garantir que habitoId está presente - usar habitoIdPadrao se necessário
+    const habitoIdFinal = formData.habitoId || habitoIdPadrao || '';
+    
+    if (!habitoIdFinal) {
+      toast.error('Hábito é obrigatório');
+      return;
+    }
+    
+    const dataToSave = {
       ...formData,
-      objetivoId: formData.objetivoId || undefined,
-      habitoId: formData.habitoId || undefined,
+      habitoId: habitoIdFinal,
       descricao: formData.descricao || undefined,
       prazo: formData.prazo || undefined,
-    });
-    onOpenChange(false);
+    };
+    
+    try {
+      await onSave(dataToSave);
+    } catch (error) {
+      console.error('Erro ao salvar tarefa:', error);
+      toast.error('Erro ao salvar tarefa');
+    }
+    // Não fechar o diálogo aqui - deixar o componente pai fechar após o sucesso
   };
 
   return (
@@ -167,59 +207,39 @@ export function TarefaDialog({
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="objetivoId">Objetivo</Label>
-                <Select
-                  value={formData.objetivoId || 'none'}
-                  onValueChange={(value: any) => {
-                    const objetivoId = value === 'none' ? '' : value;
-                    setFormData({ ...formData, objetivoId, habitoId: '' });
-                  }}
-                >
-                  <SelectTrigger id="objetivoId">
-                    <SelectValue placeholder="Nenhum" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Nenhum</SelectItem>
-                    {objetivos.map((obj) => (
-                      <SelectItem key={obj.id} value={obj.id}>
-                        {obj.titulo}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="habitoId">Hábito</Label>
-                <Select
-                  value={formData.habitoId || 'none'}
-                  onValueChange={(value: any) => {
-                    const habitoId = value === 'none' ? '' : value;
-                    setFormData({ ...formData, habitoId });
-                  }}
-                  disabled={!formData.objetivoId}
-                >
-                  <SelectTrigger id="habitoId">
-                    <SelectValue placeholder="Nenhum" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Nenhum</SelectItem>
-                    {habitosFiltrados.map((hab) => (
+            <div className="space-y-2">
+              <Label htmlFor="habitoId">Hábito *</Label>
+              <Select
+                key={`hab-${formData.habitoId || 'none'}-${habitos.length}-${tarefa?.id || 'new'}`}
+                value={formData.habitoId || habitoIdPadrao || ''}
+                onValueChange={(value: string) => {
+                  setFormData({ ...formData, habitoId: value });
+                }}
+              >
+                <SelectTrigger id="habitoId">
+                  <SelectValue placeholder={loading ? "Carregando hábitos..." : "Selecione um hábito"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {loading ? (
+                    <SelectItem value="loading" disabled>Carregando...</SelectItem>
+                  ) : habitos.length === 0 ? (
+                    <SelectItem value="empty" disabled>Nenhum hábito encontrado</SelectItem>
+                  ) : (
+                    habitos.map((hab) => (
                       <SelectItem key={hab.id} value={hab.id}>
                         {hab.titulo}
                       </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="prioridade">Prioridade</Label>
                 <Select
+                  key={`prio-${formData.prioridade || 'media'}`}
                   value={formData.prioridade || 'media'}
                   onValueChange={(value: Prioridade) => setFormData({ ...formData, prioridade: value })}
                 >
@@ -237,6 +257,7 @@ export function TarefaDialog({
               <div className="space-y-2">
                 <Label htmlFor="status">Status</Label>
                 <Select
+                  key={`status-${formData.status}`}
                   value={formData.status}
                   onValueChange={(value: StatusTarefa) => setFormData({ ...formData, status: value })}
                 >
@@ -262,11 +283,16 @@ export function TarefaDialog({
                   type="number"
                   min="0"
                   step="0.5"
-                  value={formData.estimativaHoras || ''}
-                  onChange={(e) => setFormData({ 
-                    ...formData, 
-                    estimativaHoras: e.target.value ? parseFloat(e.target.value) : undefined 
-                  })}
+                  value={formData.estimativaHoras !== null && formData.estimativaHoras !== undefined 
+                    ? formData.estimativaHoras 
+                    : ''}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setFormData({ 
+                      ...formData, 
+                      estimativaHoras: value !== '' ? parseFloat(value) || 0 : undefined 
+                    });
+                  }}
                 />
               </div>
 
@@ -277,11 +303,16 @@ export function TarefaDialog({
                   type="number"
                   min="0"
                   step="0.5"
-                  value={formData.horasGastas || ''}
-                  onChange={(e) => setFormData({ 
-                    ...formData, 
-                    horasGastas: e.target.value ? parseFloat(e.target.value) : undefined 
-                  })}
+                  value={formData.horasGastas !== null && formData.horasGastas !== undefined 
+                    ? formData.horasGastas 
+                    : ''}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setFormData({ 
+                      ...formData, 
+                      horasGastas: value !== '' ? parseFloat(value) || 0 : undefined 
+                    });
+                  }}
                 />
               </div>
             </div>

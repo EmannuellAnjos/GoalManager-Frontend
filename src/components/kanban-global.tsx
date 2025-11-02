@@ -46,7 +46,6 @@ const COLUNAS: { id: StatusTarefa; titulo: string }[] = [
 
 export function KanbanGlobal() {
   const [busca, setBusca] = useState('');
-  const [filtroObjetivo, setFiltroObjetivo] = useState<string>('todos');
   const [filtroHabito, setFiltroHabito] = useState<string>('todos');
   const [filtroPrioridade, setFiltroPrioridade] = useState<string>('todos');
   const [filtroPrazo, setFiltroPrazo] = useState<string>('todos');
@@ -99,11 +98,6 @@ export function KanbanGlobal() {
       );
     }
 
-    // Filtro por objetivo
-    if (filtroObjetivo !== 'todos') {
-      resultado = resultado.filter((t) => t.objetivoId === filtroObjetivo);
-    }
-
     // Filtro por hábito
     if (filtroHabito !== 'todos') {
       resultado = resultado.filter((t) => t.habitoId === filtroHabito);
@@ -144,23 +138,44 @@ export function KanbanGlobal() {
     }
 
     return resultado;
-  }, [tarefas, busca, filtroObjetivo, filtroHabito, filtroPrioridade, filtroPrazo]);
-
-  const habitosFiltrados = useMemo(() => {
-    if (filtroObjetivo === 'todos') return habitos;
-    return habitos.filter((h) => h.objetivoId === filtroObjetivo);
-  }, [habitos, filtroObjetivo]);
+  }, [tarefas, busca, filtroHabito, filtroPrioridade, filtroPrazo]);
 
   const handleDrop = async (tarefaId: string, novoStatus: StatusTarefa) => {
+    // Encontrar a tarefa que está sendo movida
+    const tarefaMovida = tarefas.find(t => t.id === tarefaId);
+    if (!tarefaMovida) return;
+
+    // Verificar se o status realmente mudou
+    if (tarefaMovida.status === novoStatus) return;
+
+    // Salvar o estado anterior para reversão em caso de erro
+    const statusAnterior = tarefaMovida.status;
+    
+    // Atualização otimista: mover o card visualmente imediatamente
+    setTarefas(prev => prev.map(tarefa => 
+      tarefa.id === tarefaId ? { ...tarefa, status: novoStatus } : tarefa
+    ));
+
     try {
+      // Fazer a requisição PUT apenas com o campo status
       const response = await updateTarefa(tarefaId, { status: novoStatus });
+      
+      // Atualizar com os dados retornados do servidor
       setTarefas(prev => prev.map(tarefa => 
         tarefa.id === tarefaId ? response.data : tarefa
       ));
-      toast.success('Status da tarefa atualizado!');
+      
+      // Não mostrar toast em caso de sucesso silencioso (opcional)
+      // toast.success('Status da tarefa atualizado!');
     } catch (error) {
       console.error('Erro ao atualizar status da tarefa:', error);
-      toast.error('Erro ao atualizar status da tarefa');
+      
+      // Reverter o movimento em caso de erro
+      setTarefas(prev => prev.map(tarefa => 
+        tarefa.id === tarefaId ? { ...tarefa, status: statusAnterior } : tarefa
+      ));
+      
+      toast.error('Erro ao atualizar status da tarefa. Movimento revertido.');
     }
   };
 
@@ -217,7 +232,6 @@ export function KanbanGlobal() {
 
   const limparFiltros = () => {
     setBusca('');
-    setFiltroObjetivo('todos');
     setFiltroHabito('todos');
     setFiltroPrioridade('todos');
     setFiltroPrazo('todos');
@@ -255,21 +269,6 @@ export function KanbanGlobal() {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <Select value={filtroObjetivo} onValueChange={setFiltroObjetivo}>
-            <SelectTrigger className="w-[200px]">
-              <Filter className="h-4 w-4 mr-2" />
-              <SelectValue placeholder="Objetivo" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Todos os Objetivos</SelectItem>
-              {objetivos.map((obj) => (
-                <SelectItem key={obj.id} value={obj.id}>
-                  {obj.titulo}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
           <Select value={filtroHabito} onValueChange={setFiltroHabito}>
             <SelectTrigger className="w-[200px]">
               <Filter className="h-4 w-4 mr-2" />
@@ -277,7 +276,7 @@ export function KanbanGlobal() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="todos">Todos os Hábitos</SelectItem>
-              {habitosFiltrados.map((hab) => (
+              {habitos.map((hab) => (
                 <SelectItem key={hab.id} value={hab.id}>
                   {hab.titulo}
                 </SelectItem>
@@ -312,7 +311,7 @@ export function KanbanGlobal() {
             </SelectContent>
           </Select>
 
-          {(busca || filtroObjetivo !== 'todos' || filtroHabito !== 'todos' || 
+          {(busca || filtroHabito !== 'todos' || 
             filtroPrioridade !== 'todos' || filtroPrazo !== 'todos') && (
             <Button variant="outline" onClick={limparFiltros}>
               Limpar Filtros
@@ -383,19 +382,20 @@ interface KanbanColumnProps {
 }
 
 function KanbanColumn({ coluna, tarefas, onDrop, onEdit, onDelete, objetivos, habitos }: KanbanColumnProps) {
-  const [{ isOver }, drop] = useDrop(() => ({
+  const [{ isOver, canDrop }, drop] = useDrop(() => ({
     accept: 'TAREFA',
     drop: (item: { id: string }) => onDrop(item.id, coluna.id),
     collect: (monitor) => ({
       isOver: monitor.isOver(),
+      canDrop: monitor.canDrop(),
     }),
   }));
 
   return (
     <div
       ref={drop as any}
-      className={`flex-shrink-0 w-80 bg-gray-50 rounded-lg p-4 ${
-        isOver ? 'ring-2 ring-blue-500' : ''
+      className={`flex-shrink-0 w-80 bg-gray-50 rounded-lg p-4 transition-colors ${
+        isOver && canDrop ? 'ring-2 ring-blue-500 bg-blue-50' : ''
       }`}
     >
       <div className="flex items-center justify-between mb-4">
@@ -441,7 +441,6 @@ function TarefaCard({ tarefa, onEdit, onDelete, objetivos, habitos }: TarefaCard
     }),
   }));
 
-  const objetivo = objetivos.find((o) => o.id === tarefa.objetivoId);
   const habito = habitos.find((h) => h.id === tarefa.habitoId);
 
   const getPrioridadeCor = (prioridade?: Prioridade) => {
@@ -460,12 +459,12 @@ function TarefaCard({ tarefa, onEdit, onDelete, objetivos, habitos }: TarefaCard
   };
 
   return (
-    <Card
-      ref={drag as any}
-      className={`p-4 cursor-move border-l-4 ${getPrioridadeCor(tarefa.prioridade)} ${
-        isDragging ? 'opacity-50' : ''
-      } hover:shadow-md transition-shadow`}
-    >
+    <div ref={drag as any}>
+      <Card
+        className={`p-4 cursor-move border-l-4 ${getPrioridadeCor(tarefa.prioridade)} ${
+          isDragging ? 'opacity-50' : ''
+        } hover:shadow-md transition-shadow`}
+      >
       <div className="space-y-3">
         <div className="flex items-start justify-between gap-2">
           <h5 className="flex-1">{tarefa.titulo}</h5>
@@ -502,18 +501,11 @@ function TarefaCard({ tarefa, onEdit, onDelete, objetivos, habitos }: TarefaCard
           <p className="text-sm text-gray-600 line-clamp-2">{tarefa.descricao}</p>
         )}
 
-        {(objetivo || habito) && (
+        {habito && (
           <div className="flex flex-wrap gap-1">
-            {objetivo && (
-              <Badge variant="outline" className="text-xs">
-                {objetivo.titulo}
-              </Badge>
-            )}
-            {habito && (
-              <Badge variant="outline" className="text-xs">
-                {habito.titulo}
-              </Badge>
-            )}
+            <Badge variant="outline" className="text-xs">
+              {habito.titulo}
+            </Badge>
           </div>
         )}
 
@@ -538,5 +530,6 @@ function TarefaCard({ tarefa, onEdit, onDelete, objetivos, habitos }: TarefaCard
         </div>
       </div>
     </Card>
+    </div>
   );
 }

@@ -250,8 +250,8 @@ export function ObjetivosView() {
 
   const getStatusBadge = (status: StatusObjetivo) => {
     const variants: Record<StatusObjetivo, string> = {
-      planejado: 'bg-blue-100 text-blue-800',
-      em_andamento: 'bg-yellow-100 text-yellow-800',
+      planejado: 'text-white',
+      em_andamento: 'text-white',
       concluido: 'bg-green-100 text-green-800',
       arquivado: 'bg-gray-100 text-gray-800',
     };
@@ -261,7 +261,20 @@ export function ObjetivosView() {
       concluido: 'Concluído',
       arquivado: 'Arquivado',
     };
-    return <Badge className={variants[status]}>{labels[status]}</Badge>;
+    const bgColors: Record<StatusObjetivo, string> = {
+      planejado: '#42A5F5',
+      em_andamento: '#FFD54F',
+      concluido: '#4CAF50',
+      arquivado: '#757575',
+    };
+    return (
+      <Badge 
+        className={variants[status]} 
+        style={{ backgroundColor: bgColors[status] }}
+      >
+        {labels[status]}
+      </Badge>
+    );
   };
 
   if (loading) {
@@ -321,11 +334,14 @@ export function ObjetivosView() {
       </div>
 
       {/* Tabela */}
-      <div className="border rounded-lg">
+      <div className="border-2 rounded-lg shadow-sm" style={{ 
+        backgroundColor: '#FFF8E1', 
+        borderColor: '#FFE082' 
+      }}>
         <Table>
           <TableHeader>
-            <TableRow>
-              <TableHead className="w-12">
+            <TableRow className="hover:opacity-90" style={{ backgroundColor: '#FFF8E1' }}>
+              <TableHead className="w-12 p-3" style={{ color: '#2C2C2C' }}>
                 <Checkbox
                   checked={
                     objetivosPaginados.length > 0 &&
@@ -334,8 +350,8 @@ export function ObjetivosView() {
                   onCheckedChange={toggleSelectAll}
                 />
               </TableHead>
-              <TableHead className="w-12"></TableHead>
-              <TableHead className="cursor-pointer" onClick={() => {
+              <TableHead className="w-12 p-3" style={{ color: '#2C2C2C' }}></TableHead>
+              <TableHead className="cursor-pointer p-3" style={{ color: '#2C2C2C', fontWeight: 600 }} onClick={() => {
                 setOrdenacao({
                   campo: 'titulo',
                   direcao: ordenacao.campo === 'titulo' && ordenacao.direcao === 'asc' ? 'desc' : 'asc',
@@ -343,23 +359,26 @@ export function ObjetivosView() {
               }}>
                 Título
               </TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Progresso</TableHead>
-              <TableHead>Período</TableHead>
-              <TableHead className="w-12"></TableHead>
+              <TableHead className="p-3" style={{ color: '#2C2C2C', fontWeight: 600 }}>Status</TableHead>
+              <TableHead className="p-3" style={{ color: '#2C2C2C', fontWeight: 600 }}>Progresso</TableHead>
+              <TableHead className="p-3" style={{ color: '#2C2C2C', fontWeight: 600 }}>Período</TableHead>
+              <TableHead className="w-12 p-3" style={{ color: '#2C2C2C' }}></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {objetivosPaginados.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={7} className="text-center py-8 text-gray-500">
+              <TableRow style={{ backgroundColor: '#FFF8E1' }}>
+                <TableCell colSpan={7} className="text-center py-8" style={{ color: '#2C2C2C' }}>
                   Nenhum objetivo encontrado
                 </TableCell>
               </TableRow>
             ) : (
               objetivosPaginados.map((objetivo) => (
                 <React.Fragment key={objetivo.id}>
-                  <TableRow>
+                  <TableRow 
+                    className="hover:opacity-90 transition-opacity" 
+                    style={{ backgroundColor: '#FFF8E1', color: '#2C2C2C' }}
+                  >
                     <TableCell>
                       <Checkbox
                         checked={selectedObjetivos.has(objetivo.id)}
@@ -379,25 +398,33 @@ export function ObjetivosView() {
                         )}
                       </Button>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="p-3">
                       <div>
-                        <div>{objetivo.titulo}</div>
+                        <div style={{ color: '#2C2C2C', fontWeight: 600 }}>{objetivo.titulo}</div>
                         {objetivo.descricao && (
-                          <div className="text-sm text-gray-500">{objetivo.descricao}</div>
+                          <div className="text-sm" style={{ color: '#6B6B6B' }}>{objetivo.descricao}</div>
                         )}
                       </div>
                     </TableCell>
-                    <TableCell>{getStatusBadge(objetivo.status)}</TableCell>
-                    <TableCell>
+                    <TableCell className="p-3">{getStatusBadge(objetivo.status)}</TableCell>
+                    <TableCell className="p-3">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
-                          <Progress value={objetivo.progresso} className="flex-1" />
-                          <span className="text-sm">{objetivo.progresso}%</span>
+                          <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                            <div 
+                              className="h-full rounded-full"
+                              style={{
+                                width: `${objetivo.progresso}%`,
+                                background: 'linear-gradient(to right, #FFD54F, #FBC02D)'
+                              }}
+                            />
+                          </div>
+                          <span className="text-sm" style={{ color: '#2C2C2C' }}>{objetivo.progresso}%</span>
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell>
-                      <div className="text-sm">
+                    <TableCell className="p-3">
+                      <div className="text-sm" style={{ color: '#2C2C2C' }}>
                         {objetivo.inicio && <div>Início: {new Date(objetivo.inicio).toLocaleDateString()}</div>}
                         {objetivo.fim && <div>Fim: {new Date(objetivo.fim).toLocaleDateString()}</div>}
                       </div>
@@ -428,11 +455,13 @@ export function ObjetivosView() {
                   </TableRow>
                   {expandedObjetivos.has(objetivo.id) && (
                     <TableRow>
-                      <TableCell colSpan={7} className="bg-gray-50 p-0">
-                        <HabitosExpandedRow 
-                          objetivoId={objetivo.id} 
-                          onRefresh={recarregarDados}
-                        />
+                      <TableCell colSpan={7} className="p-0" style={{ backgroundColor: '#FFF8E1' }}>
+                        <div className="p-3">
+                          <HabitosExpandedRow 
+                            objetivoId={objetivo.id} 
+                            onRefresh={recarregarDados}
+                          />
+                        </div>
                       </TableCell>
                     </TableRow>
                   )}

@@ -65,7 +65,12 @@ export function HabitosExpandedRow({ objetivoId, onRefresh }: HabitosExpandedRow
       try {
         setLoading(true);
         const response = await getHabitosByObjetivo(objetivoId);
-        setHabitos(response.data || []);
+        // Garantir que todos os hábitos tenham o objetivoId
+        const habitosComObjetivoId = (response.data || []).map((h: Habito) => ({
+          ...h,
+          objetivoId: h.objetivoId || objetivoId
+        }));
+        setHabitos(habitosComObjetivoId);
       } catch (error) {
         console.error('Erro ao carregar hábitos:', error);
         setHabitos([]);
@@ -103,7 +108,12 @@ export function HabitosExpandedRow({ objetivoId, onRefresh }: HabitosExpandedRow
   };
 
   const handleEditar = (habito: Habito) => {
-    setHabitoEditando(habito);
+    // Garantir que o hábito tenha o objetivoId antes de editar
+    const habitoComObjetivoId = {
+      ...habito,
+      objetivoId: habito.objetivoId || objetivoId
+    };
+    setHabitoEditando(habitoComObjetivoId);
     setDialogAberto(true);
   };
 
@@ -118,7 +128,11 @@ export function HabitosExpandedRow({ objetivoId, onRefresh }: HabitosExpandedRow
       }
       // Recarregar a lista de hábitos
       const response = await getHabitosByObjetivo(objetivoId);
-      setHabitos(response.data || []);
+      const habitosComObjetivoId = (response.data || []).map((h: Habito) => ({
+        ...h,
+        objetivoId: h.objetivoId || objetivoId
+      }));
+      setHabitos(habitosComObjetivoId);
       onRefresh();
     } catch (error) {
       console.error('Erro ao salvar hábito:', error);
@@ -138,7 +152,11 @@ export function HabitosExpandedRow({ objetivoId, onRefresh }: HabitosExpandedRow
         toast.success('Hábito excluído com sucesso!');
         // Recarregar a lista de hábitos
         const response = await getHabitosByObjetivo(objetivoId);
-        setHabitos(response.data || []);
+        const habitosComObjetivoId = (response.data || []).map((h: Habito) => ({
+          ...h,
+          objetivoId: h.objetivoId || objetivoId
+        }));
+        setHabitos(habitosComObjetivoId);
         onRefresh();
       } catch (error) {
         console.error('Erro ao deletar hábito:', error);
@@ -155,7 +173,11 @@ export function HabitosExpandedRow({ objetivoId, onRefresh }: HabitosExpandedRow
       toast.success('Hábito marcado como feito!');
       // Recarregar a lista de hábitos
       const response = await getHabitosByObjetivo(objetivoId);
-      setHabitos(response.data || []);
+      const habitosComObjetivoId = (response.data || []).map((h: Habito) => ({
+        ...h,
+        objetivoId: h.objetivoId || objetivoId
+      }));
+      setHabitos(habitosComObjetivoId);
       onRefresh();
     } catch (error) {
       console.error('Erro ao marcar hábito como feito:', error);
@@ -169,7 +191,11 @@ export function HabitosExpandedRow({ objetivoId, onRefresh }: HabitosExpandedRow
       toast.success('Ciclo do hábito resetado!');
       // Recarregar a lista de hábitos
       const response = await getHabitosByObjetivo(objetivoId);
-      setHabitos(response.data || []);
+      const habitosComObjetivoId = (response.data || []).map((h: Habito) => ({
+        ...h,
+        objetivoId: h.objetivoId || objetivoId
+      }));
+      setHabitos(habitosComObjetivoId);
       onRefresh();
     } catch (error) {
       console.error('Erro ao resetar ciclo do hábito:', error);
@@ -179,7 +205,7 @@ export function HabitosExpandedRow({ objetivoId, onRefresh }: HabitosExpandedRow
 
   const getStatusBadge = (status: StatusHabito) => {
     const variants: Record<StatusHabito, string> = {
-      ativo: 'bg-green-100 text-green-800',
+      ativo: 'text-white',
       pausado: 'bg-yellow-100 text-yellow-800',
       concluido: 'bg-blue-100 text-blue-800',
     };
@@ -188,7 +214,19 @@ export function HabitosExpandedRow({ objetivoId, onRefresh }: HabitosExpandedRow
       pausado: 'Pausado',
       concluido: 'Concluído',
     };
-    return <Badge className={variants[status]}>{labels[status]}</Badge>;
+    const bgColors: Record<StatusHabito, string> = {
+      ativo: '#4CAF50',
+      pausado: '#FFD54F',
+      concluido: '#42A5F5',
+    };
+    return (
+      <Badge 
+        className={variants[status]} 
+        style={{ backgroundColor: bgColors[status] }}
+      >
+        {labels[status]}
+      </Badge>
+    );
   };
 
   const getFrequenciaLabel = (frequencia: string) => {
@@ -237,11 +275,14 @@ export function HabitosExpandedRow({ objetivoId, onRefresh }: HabitosExpandedRow
         </Button>
       </div>
 
-      <div className="border rounded-lg">
+      <div className="border-2 rounded-lg shadow-sm" style={{ 
+        backgroundColor: '#E8F5E9', 
+        borderColor: '#C8E6C9' 
+      }}>
         <Table>
           <TableHeader>
-            <TableRow>
-              <TableHead className="w-12">
+            <TableRow className="hover:opacity-90" style={{ backgroundColor: '#E8F5E9' }}>
+              <TableHead className="w-12 p-3" style={{ color: '#2E7D32' }}>
                 <Checkbox
                   checked={habitos.length > 0 && selectedHabitos.size === habitos.length}
                   onCheckedChange={() => {
@@ -253,26 +294,29 @@ export function HabitosExpandedRow({ objetivoId, onRefresh }: HabitosExpandedRow
                   }}
                 />
               </TableHead>
-              <TableHead className="w-12"></TableHead>
-              <TableHead>Título</TableHead>
-              <TableHead>Frequência</TableHead>
-              <TableHead>Realizações</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Progresso</TableHead>
-              <TableHead className="w-12"></TableHead>
+              <TableHead className="w-12 p-3" style={{ color: '#2E7D32' }}></TableHead>
+              <TableHead className="p-3" style={{ color: '#2E7D32', fontWeight: 600 }}>Título</TableHead>
+              <TableHead className="p-3" style={{ color: '#2E7D32', fontWeight: 600 }}>Frequência</TableHead>
+              <TableHead className="p-3" style={{ color: '#2E7D32', fontWeight: 600 }}>Realizações</TableHead>
+              <TableHead className="p-3" style={{ color: '#2E7D32', fontWeight: 600 }}>Status</TableHead>
+              <TableHead className="p-3" style={{ color: '#2E7D32', fontWeight: 600 }}>Progresso</TableHead>
+              <TableHead className="w-12 p-3" style={{ color: '#2E7D32' }}></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {habitos.map((habito) => (
               <React.Fragment key={habito.id}>
-                <TableRow>
-                  <TableCell>
+                <TableRow 
+                  className="hover:opacity-90 transition-opacity" 
+                  style={{ backgroundColor: '#E8F5E9', color: '#2E7D32' }}
+                >
+                  <TableCell className="p-3">
                     <Checkbox
                       checked={selectedHabitos.has(habito.id)}
                       onCheckedChange={() => toggleSelected(habito.id)}
                     />
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="p-3">
                     <Button
                       variant="ghost"
                       size="sm"
@@ -285,18 +329,18 @@ export function HabitosExpandedRow({ objetivoId, onRefresh }: HabitosExpandedRow
                       )}
                     </Button>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="p-3">
                     <div>
-                      <div>{habito.titulo}</div>
+                      <div style={{ color: '#2E7D32', fontWeight: 600 }}>{habito.titulo}</div>
                       {habito.descricao && (
-                        <div className="text-sm text-gray-500">{habito.descricao}</div>
+                        <div className="text-sm" style={{ color: '#5C8D5E' }}>{habito.descricao}</div>
                       )}
                     </div>
                   </TableCell>
-                  <TableCell>{getFrequenciaLabel(habito.frequencia)}</TableCell>
-                  <TableCell>
+                  <TableCell className="p-3" style={{ color: '#2E7D32' }}>{getFrequenciaLabel(habito.frequencia)}</TableCell>
+                  <TableCell className="p-3">
                     <div className="flex items-center gap-2">
-                      <span>
+                      <span style={{ color: '#2E7D32' }}>
                         {habito.realizadosNoPeriodo} / {habito.alvoPorPeriodo}
                       </span>
                       <Button
@@ -309,16 +353,24 @@ export function HabitosExpandedRow({ objetivoId, onRefresh }: HabitosExpandedRow
                       </Button>
                     </div>
                   </TableCell>
-                  <TableCell>{getStatusBadge(habito.status)}</TableCell>
-                  <TableCell>
+                  <TableCell className="p-3">{getStatusBadge(habito.status)}</TableCell>
+                  <TableCell className="p-3">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <Progress value={habito.progresso} className="flex-1" />
-                        <span className="text-sm">{habito.progresso}%</span>
+                        <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full rounded-full"
+                            style={{
+                              width: `${habito.progresso}%`,
+                              background: 'linear-gradient(to right, #FFD54F, #FBC02D)'
+                            }}
+                          />
+                        </div>
+                        <span className="text-sm" style={{ color: '#2E7D32' }}>{habito.progresso}%</span>
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="p-3">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="sm">
@@ -353,12 +405,14 @@ export function HabitosExpandedRow({ objetivoId, onRefresh }: HabitosExpandedRow
                 </TableRow>
                 {expandedHabitos.has(habito.id) && (
                   <TableRow>
-                    <TableCell colSpan={8} className="bg-gray-100 p-0">
-                      <TarefasExpandedRow 
-                        objetivoId={objetivoId}
-                        habitoId={habito.id} 
-                        onRefresh={onRefresh}
-                      />
+                    <TableCell colSpan={8} className="p-0" style={{ backgroundColor: '#E8F5E9' }}>
+                      <div className="p-3">
+                        <TarefasExpandedRow 
+                          objetivoId={objetivoId}
+                          habitoId={habito.id} 
+                          onRefresh={onRefresh}
+                        />
+                      </div>
                     </TableCell>
                   </TableRow>
                 )}

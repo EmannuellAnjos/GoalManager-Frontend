@@ -51,28 +51,30 @@ export function HabitoDialog({ open, onOpenChange, habito, objetivoIdPadrao, onS
   }, [open]);
 
   useEffect(() => {
-    if (habito) {
-      setFormData({
-        objetivoId: habito.objetivoId,
-        titulo: habito.titulo,
-        descricao: habito.descricao || '',
-        frequencia: habito.frequencia,
-        alvoPorPeriodo: habito.alvoPorPeriodo,
-        realizadosNoPeriodo: habito.realizadosNoPeriodo,
-        status: habito.status,
-      });
-    } else {
-      setFormData({
-        objetivoId: objetivoIdPadrao || objetivos[0]?.id || '',
-        titulo: '',
-        descricao: '',
-        frequencia: 'diario',
-        alvoPorPeriodo: 1,
-        realizadosNoPeriodo: 0,
-        status: 'ativo',
-      });
+    if (open && !loadingObjetivos) {
+      if (habito) {
+        setFormData({
+          objetivoId: habito.objetivoId,
+          titulo: habito.titulo,
+          descricao: habito.descricao || '',
+          frequencia: habito.frequencia,
+          alvoPorPeriodo: habito.alvoPorPeriodo,
+          realizadosNoPeriodo: habito.realizadosNoPeriodo,
+          status: habito.status,
+        });
+      } else {
+        setFormData({
+          objetivoId: objetivoIdPadrao || objetivos[0]?.id || '',
+          titulo: '',
+          descricao: '',
+          frequencia: 'diario',
+          alvoPorPeriodo: 1,
+          realizadosNoPeriodo: 0,
+          status: 'ativo',
+        });
+      }
     }
-  }, [habito, open, objetivoIdPadrao]);
+  }, [habito, open, objetivoIdPadrao, objetivos, loadingObjetivos]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -96,6 +98,7 @@ export function HabitoDialog({ open, onOpenChange, habito, objetivoIdPadrao, onS
             <div className="space-y-2">
               <Label htmlFor="objetivoId">Objetivo *</Label>
               <Select
+                key={formData.objetivoId}
                 value={formData.objetivoId}
                 onValueChange={(value: string) => setFormData({ ...formData, objetivoId: value })}
               >
@@ -150,6 +153,7 @@ export function HabitoDialog({ open, onOpenChange, habito, objetivoIdPadrao, onS
               <div className="space-y-2">
                 <Label htmlFor="frequencia">Frequência</Label>
                 <Select
+                  key={`freq-${formData.frequencia}`}
                   value={formData.frequencia}
                   onValueChange={(value: Frequencia) => setFormData({ ...formData, frequencia: value })}
                 >
@@ -191,6 +195,7 @@ export function HabitoDialog({ open, onOpenChange, habito, objetivoIdPadrao, onS
               <div className="space-y-2">
                 <Label htmlFor="status">Status</Label>
                 <Select
+                  key={`status-${formData.status}`}
                   value={formData.status}
                   onValueChange={(value: StatusHabito) => setFormData({ ...formData, status: value })}
                 >

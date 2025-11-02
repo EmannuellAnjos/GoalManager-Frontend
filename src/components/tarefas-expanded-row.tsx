@@ -6,6 +6,9 @@ import { Label } from './ui/label';
 import { TarefaDialog } from './tarefa-dialog';
 import { TarefasTable } from './tarefas-table';
 import { TarefasKanbanLocal } from './tarefas-kanban-local';
+import { Tarefa } from '../lib/types';
+import { createTarefa } from '../lib/api';
+import { toast } from 'sonner';
 
 interface TarefasExpandedRowProps {
   objetivoId: string;
@@ -16,6 +19,36 @@ interface TarefasExpandedRowProps {
 export function TarefasExpandedRow({ objetivoId, habitoId, onRefresh }: TarefasExpandedRowProps) {
   const [modoKanban, setModoKanban] = useState(false);
   const [dialogAberto, setDialogAberto] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+
+  const handleSalvar = async (data: Omit<Tarefa, 'id' | 'createdAt' | 'updatedAt'>) => {
+    try {
+      // Garantir que habitoId está presente
+      const dataComHabitoId = {
+        ...data,
+        habitoId: data.habitoId || habitoId
+      };
+      
+      const response = await createTarefa(dataComHabitoId);
+      
+      if (response && response.data) {
+        toast.success('Tarefa criada com sucesso!');
+        setDialogAberto(false);
+        // Forçar recarregamento dos componentes filhos e do componente pai
+        setRefreshTrigger(prev => prev + 1);
+        setTimeout(() => {
+          onRefresh();
+        }, 300);
+      } else {
+        throw new Error('Resposta inválida do servidor');
+      }
+    } catch (error) {
+      console.error('Erro ao criar tarefa:', error);
+      toast.error('Erro ao criar tarefa. Verifique o console para mais detalhes.');
+      // Não fechar o diálogo em caso de erro para o usuário poder corrigir
+    }
+  };
 
   return (
     <div className="p-4">
@@ -42,13 +75,13 @@ export function TarefasExpandedRow({ objetivoId, habitoId, onRefresh }: TarefasE
 
       {modoKanban ? (
         <TarefasKanbanLocal
-          objetivoId={objetivoId}
+          key={`kanban-${habitoId}-${refreshTrigger}`}
           habitoId={habitoId}
           onRefresh={onRefresh}
         />
       ) : (
         <TarefasTable
-          objetivoId={objetivoId}
+          key={`table-${habitoId}-${refreshTrigger}`}
           habitoId={habitoId}
           onRefresh={onRefresh}
         />
@@ -57,12 +90,8 @@ export function TarefasExpandedRow({ objetivoId, habitoId, onRefresh }: TarefasE
       <TarefaDialog
         open={dialogAberto}
         onOpenChange={setDialogAberto}
-        objetivoIdPadrao={objetivoId}
         habitoIdPadrao={habitoId}
-        onSave={() => {
-          onRefresh();
-          setDialogAberto(false);
-        }}
+        onSave={handleSalvar}
       />
     </div>
   );

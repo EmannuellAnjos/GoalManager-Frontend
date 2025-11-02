@@ -35,12 +35,11 @@ import { TarefaDialog } from './tarefa-dialog';
 import { toast } from 'sonner';
 
 interface TarefasTableProps {
-  objetivoId: string;
   habitoId: string;
   onRefresh: () => void;
 }
 
-export function TarefasTable({ objetivoId, habitoId, onRefresh }: TarefasTableProps) {
+export function TarefasTable({ habitoId, onRefresh }: TarefasTableProps) {
   const [selectedTarefas, setSelectedTarefas] = useState<Set<string>>(new Set());
   const [dialogAberto, setDialogAberto] = useState(false);
   const [tarefaEditando, setTarefaEditando] = useState<Tarefa | undefined>();
@@ -49,13 +48,28 @@ export function TarefasTable({ objetivoId, habitoId, onRefresh }: TarefasTablePr
   const [tarefas, setTarefas] = useState<Tarefa[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Função auxiliar para normalizar tarefas (garantir habitoId e campos numéricos)
+  const normalizarTarefa = (t: Tarefa): Tarefa => ({
+    ...t,
+    habitoId: t.habitoId || habitoId,
+    // Preservar estimativaHoras e horasGastas mesmo se forem 0 ou null
+    estimativaHoras: t.estimativaHoras !== null && t.estimativaHoras !== undefined 
+      ? (typeof t.estimativaHoras === 'string' ? parseFloat(t.estimativaHoras) : Number(t.estimativaHoras))
+      : undefined,
+    horasGastas: t.horasGastas !== null && t.horasGastas !== undefined
+      ? (typeof t.horasGastas === 'string' ? parseFloat(t.horasGastas) : Number(t.horasGastas))
+      : undefined
+  });
+
   // Carregar tarefas quando o componente montar ou habitoId mudar
   useEffect(() => {
     const carregarTarefas = async () => {
       try {
         setLoading(true);
         const response = await getTarefasByHabito(habitoId);
-        setTarefas(response.data || []);
+        // Normalizar todas as tarefas
+        const tarefasComHabitoId = (response.data || []).map(normalizarTarefa);
+        setTarefas(tarefasComHabitoId);
       } catch (error) {
         console.error('Erro ao carregar tarefas:', error);
         setTarefas([]);
@@ -78,12 +92,12 @@ export function TarefasTable({ objetivoId, habitoId, onRefresh }: TarefasTablePr
   };
 
   const handleEditar = (tarefa: Tarefa) => {
-    setTarefaEditando(tarefa);
-    setDialogAberto(true);
-  };
-
-  const handleCriar = () => {
-    setTarefaEditando(undefined);
+    // Garantir que a tarefa tenha habitoId
+    const tarefaComHabitoId = {
+      ...tarefa,
+      habitoId: tarefa.habitoId || habitoId
+    };
+    setTarefaEditando(tarefaComHabitoId);
     setDialogAberto(true);
   };
 
@@ -98,7 +112,10 @@ export function TarefasTable({ objetivoId, habitoId, onRefresh }: TarefasTablePr
       }
       // Recarregar a lista de tarefas
       const response = await getTarefasByHabito(habitoId);
-      setTarefas(response.data || []);
+      const tarefasComHabitoId = (response.data || []).map(normalizarTarefa);
+      setTarefas(tarefasComHabitoId);
+      setTarefaEditando(undefined);
+      setDialogAberto(false);
       onRefresh();
     } catch (error) {
       console.error('Erro ao salvar tarefa:', error);
@@ -118,7 +135,11 @@ export function TarefasTable({ objetivoId, habitoId, onRefresh }: TarefasTablePr
         toast.success('Tarefa excluída com sucesso!');
         // Recarregar a lista de tarefas
         const response = await getTarefasByHabito(habitoId);
-        setTarefas(response.data || []);
+        const tarefasComHabitoId = (response.data || []).map((t: Tarefa) => ({
+          ...t,
+          habitoId: t.habitoId || habitoId
+        }));
+        setTarefas(tarefasComHabitoId);
         onRefresh();
       } catch (error) {
         console.error('Erro ao deletar tarefa:', error);
@@ -129,10 +150,11 @@ export function TarefasTable({ objetivoId, habitoId, onRefresh }: TarefasTablePr
     setTarefaParaDeletar(null);
   };
 
-  const getStatusBadge = (status: StatusTarefa) => {
+  const getStatusBadge = (status: StatusTarefa, prazo?: string) => {
+    const isAtrasada = prazo && isPrazoAtrasado(prazo) && status !== 'concluida';
     const variants: Record<StatusTarefa, string> = {
       backlog: 'bg-gray-100 text-gray-800',
-      a_fazer: 'bg-blue-100 text-blue-800',
+      a_fazer: isAtrasada ? 'text-white' : 'bg-blue-100 text-blue-800',
       fazendo: 'bg-yellow-100 text-yellow-800',
       bloqueada: 'bg-red-100 text-red-800',
       concluida: 'bg-green-100 text-green-800',
@@ -144,7 +166,21 @@ export function TarefasTable({ objetivoId, habitoId, onRefresh }: TarefasTablePr
       bloqueada: 'Bloqueada',
       concluida: 'Concluída',
     };
-    return <Badge className={variants[status]}>{labels[status]}</Badge>;
+    const bgColors: Record<StatusTarefa, string> = {
+      backlog: '#757575',
+      a_fazer: isAtrasada ? '#E53935' : '#42A5F5',
+      fazendo: '#FFD54F',
+      bloqueada: '#E53935',
+      concluida: '#4CAF50',
+    };
+    return (
+      <Badge 
+        className={variants[status]} 
+        style={isAtrasada ? { backgroundColor: bgColors[status] } : {}}
+      >
+        {labels[status]}
+      </Badge>
+    );
   };
 
   const getPrioridadeBadge = (prioridade?: Prioridade) => {
@@ -185,19 +221,14 @@ export function TarefasTable({ objetivoId, habitoId, onRefresh }: TarefasTablePr
 
   return (
     <>
-      <div className="flex items-center justify-between mb-4">
-        <h4 className="font-medium">Tarefas do Hábito</h4>
-        <Button onClick={handleCriar} size="sm">
-          <Plus className="h-4 w-4 mr-2" />
-          Adicionar Tarefa
-        </Button>
-      </div>
-
-      <div className="border rounded-lg">
+      <div className="border-2 rounded-lg shadow-sm" style={{ 
+        backgroundColor: '#F5F5F5', 
+        borderColor: '#E0E0E0' 
+      }}>
         <Table>
           <TableHeader>
-            <TableRow>
-              <TableHead className="w-12">
+            <TableRow className="hover:opacity-90" style={{ backgroundColor: '#F5F5F5' }}>
+              <TableHead className="w-12 p-3" style={{ color: '#333333' }}>
                 <Checkbox
                   checked={tarefas.length > 0 && selectedTarefas.size === tarefas.length}
                   onCheckedChange={() => {
@@ -209,44 +240,58 @@ export function TarefasTable({ objetivoId, habitoId, onRefresh }: TarefasTablePr
                   }}
                 />
               </TableHead>
-              <TableHead>Título</TableHead>
-              <TableHead>Prioridade</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Progresso</TableHead>
-              <TableHead>Prazo</TableHead>
-              <TableHead className="w-12"></TableHead>
+              <TableHead className="p-3" style={{ color: '#333333', fontWeight: 600 }}>Título</TableHead>
+              <TableHead className="p-3" style={{ color: '#333333', fontWeight: 600 }}>Prioridade</TableHead>
+              <TableHead className="p-3" style={{ color: '#333333', fontWeight: 600 }}>Status</TableHead>
+              <TableHead className="p-3" style={{ color: '#333333', fontWeight: 600 }}>Progresso</TableHead>
+              <TableHead className="p-3" style={{ color: '#333333', fontWeight: 600 }}>Prazo</TableHead>
+              <TableHead className="w-12 p-3" style={{ color: '#333333' }}></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {tarefas.map((tarefa) => (
-              <TableRow key={tarefa.id}>
-                <TableCell>
+              <TableRow 
+                key={tarefa.id}
+                className="hover:opacity-90 transition-opacity" 
+                style={{ backgroundColor: '#F5F5F5', color: '#333333' }}
+              >
+                <TableCell className="p-3">
                   <Checkbox
                     checked={selectedTarefas.has(tarefa.id)}
                     onCheckedChange={() => toggleSelected(tarefa.id)}
                   />
                 </TableCell>
-                <TableCell>
+                <TableCell className="p-3">
                   <div>
-                    <div>{tarefa.titulo}</div>
+                    <div style={{ color: '#333333', fontWeight: 600 }}>{tarefa.titulo}</div>
                     {tarefa.descricao && (
-                      <div className="text-sm text-gray-500">{tarefa.descricao}</div>
+                      <div className="text-sm" style={{ color: '#6B6B6B' }}>{tarefa.descricao}</div>
                     )}
                   </div>
                 </TableCell>
-                <TableCell>{getPrioridadeBadge(tarefa.prioridade)}</TableCell>
-                <TableCell>{getStatusBadge(tarefa.status)}</TableCell>
-                <TableCell>
+                <TableCell className="p-3">{getPrioridadeBadge(tarefa.prioridade)}</TableCell>
+                <TableCell className="p-3">{getStatusBadge(tarefa.status, tarefa.prazo)}</TableCell>
+                <TableCell className="p-3">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <Progress value={tarefa.progresso} className="flex-1" />
-                      <span className="text-sm">{tarefa.progresso}%</span>
+                      <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full rounded-full"
+                          style={{
+                            width: `${tarefa.progresso}%`,
+                            background: 'linear-gradient(to right, #FFD54F, #FBC02D)'
+                          }}
+                        />
+                      </div>
+                      <span className="text-sm" style={{ color: '#333333' }}>{tarefa.progresso}%</span>
                     </div>
                   </div>
                 </TableCell>
-                <TableCell>
+                <TableCell className="p-3">
                   {tarefa.prazo && (
-                    <div className={`flex items-center gap-1 ${isPrazoAtrasado(tarefa.prazo) && tarefa.status !== 'concluida' ? 'text-red-600' : ''}`}>
+                    <div className="flex items-center gap-1" style={{ 
+                      color: isPrazoAtrasado(tarefa.prazo) && tarefa.status !== 'concluida' ? '#E53935' : '#333333'
+                    }}>
                       {isPrazoAtrasado(tarefa.prazo) && tarefa.status !== 'concluida' && (
                         <AlertCircle className="h-4 w-4" />
                       )}
@@ -256,7 +301,7 @@ export function TarefasTable({ objetivoId, habitoId, onRefresh }: TarefasTablePr
                     </div>
                   )}
                 </TableCell>
-                <TableCell>
+                <TableCell className="p-3">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="ghost" size="sm">
@@ -290,7 +335,6 @@ export function TarefasTable({ objetivoId, habitoId, onRefresh }: TarefasTablePr
         open={dialogAberto}
         onOpenChange={setDialogAberto}
         tarefa={tarefaEditando}
-        objetivoIdPadrao={objetivoId}
         habitoIdPadrao={habitoId}
         onSave={handleSalvar}
       />

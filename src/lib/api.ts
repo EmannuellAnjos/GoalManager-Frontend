@@ -20,8 +20,6 @@ interface LoginResponse {
 async function loginAndGetToken(): Promise<string> {
   const loginUrl = `${API_BASE_URL}/auth/login`;
   
-  console.log('🔑 Fazendo login automático...');
-  
   try {
     const response = await fetch(loginUrl, {
       method: 'POST',
@@ -44,16 +42,11 @@ async function loginAndGetToken(): Promise<string> {
     // Salvar token no localStorage
     localStorage.setItem('auth_token', token);
     
-    console.log('✅ Login realizado com sucesso!');
-    console.log('🔐 Token obtido:', token);
-    console.log('👤 Usuário:', data.data.user);
-    
     return token;
   } catch (error) {
-    console.error('❌ Erro no login automático:', error);
+    console.error('Erro no login automático:', error);
     // Fallback para token fictício
     const fallbackToken = `dev-token-${USER_ID}`;
-    console.log('🔄 Usando token fictício como fallback:', fallbackToken);
     return fallbackToken;
   }
 }
@@ -66,26 +59,21 @@ function getAuthToken(): string {
   // Verificar se já temos um token no localStorage
   const storedToken = localStorage.getItem('auth_token');
   if (storedToken) {
-    console.log('🔐 Usando token do localStorage:', storedToken);
     return storedToken;
   }
   
   // Se não temos token, usar o fictício por enquanto
   // (o login será feito de forma assíncrona)
   const fallbackToken = `dev-token-${USER_ID}`;
-  console.log('🔄 Usando token fictício temporário:', fallbackToken);
   
   return fallbackToken;
 }
 
 // Função para inicializar autenticação (deve ser chamada no início da aplicação)
 export async function initializeAuth(): Promise<void> {
-  console.log('🚀 Inicializando autenticação...');
-  
   // Verificar se já temos token válido
   const storedToken = localStorage.getItem('auth_token');
   if (storedToken) {
-    console.log('✅ Token encontrado no localStorage');
     return;
   }
   
@@ -93,14 +81,12 @@ export async function initializeAuth(): Promise<void> {
   try {
     await loginAndGetToken();
   } catch (error) {
-    console.error('❌ Falha na inicialização da autenticação:', error);
+    console.error('Falha na inicialização da autenticação:', error);
   }
 }
 
 // Função para forçar renovação do token (útil para testes)
 export async function refreshToken(): Promise<void> {
-  console.log('🔄 Forçando renovação do token...');
-  
   // Limpar token atual
   localStorage.removeItem('auth_token');
   cachedToken = null;
@@ -108,9 +94,8 @@ export async function refreshToken(): Promise<void> {
   // Fazer novo login
   try {
     await loginAndGetToken();
-    console.log('✅ Token renovado com sucesso');
   } catch (error) {
-    console.error('❌ Falha na renovação do token:', error);
+    console.error('Falha na renovação do token:', error);
     throw error;
   }
 }
@@ -135,12 +120,6 @@ async function makeRequest<T>(
     },
   };
 
-  // Debug: Log da requisição
-  console.log('🚀 Fazendo requisição:', {
-    url,
-    method: config.method || 'GET',
-    headers: config.headers
-  });
 
   try {
     const response = await fetch(url, config);

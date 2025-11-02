@@ -24,22 +24,24 @@ export function ObjetivoDialog({ open, onOpenChange, objetivo, onSave }: Objetiv
   });
 
   useEffect(() => {
-    if (objetivo) {
-      setFormData({
-        titulo: objetivo.titulo,
-        descricao: objetivo.descricao || '',
-        inicio: objetivo.inicio || '',
-        fim: objetivo.fim || '',
-        status: objetivo.status,
-      });
-    } else {
-      setFormData({
-        titulo: '',
-        descricao: '',
-        inicio: '',
-        fim: '',
-        status: 'planejado',
-      });
+    if (open) {
+      if (objetivo) {
+        setFormData({
+          titulo: objetivo.titulo,
+          descricao: objetivo.descricao || '',
+          inicio: objetivo.inicio || '',
+          fim: objetivo.fim || '',
+          status: objetivo.status,
+        });
+      } else {
+        setFormData({
+          titulo: '',
+          descricao: '',
+          inicio: '',
+          fim: '',
+          status: 'planejado',
+        });
+      }
     }
   }, [objetivo, open]);
 
@@ -111,6 +113,7 @@ export function ObjetivoDialog({ open, onOpenChange, objetivo, onSave }: Objetiv
             <div className="space-y-2">
               <Label htmlFor="status">Status</Label>
               <Select
+                key={`status-${formData.status}`}
                 value={formData.status}
                 onValueChange={(value: StatusObjetivo) => setFormData({ ...formData, status: value })}
               >

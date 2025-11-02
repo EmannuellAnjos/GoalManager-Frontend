@@ -6,7 +6,7 @@ import { Badge } from './ui/badge';
 import { Card } from './ui/card';
 import { Progress } from './ui/progress';
 import { Tarefa, StatusTarefa, Prioridade } from '../lib/types';
-import { getTarefasByHabito, updateTarefa, deleteTarefa } from '../lib/api';
+import { getTarefasByHabito, updateTarefa, deleteTarefa, createTarefa } from '../lib/api';
 import { TarefaDialog } from './tarefa-dialog';
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
@@ -29,7 +29,6 @@ import {
 } from './ui/alert-dialog';
 
 interface TarefasKanbanLocalProps {
-  objetivoId: string;
   habitoId: string;
   onRefresh: () => void;
 }
@@ -42,15 +41,15 @@ const COLUNAS: { id: StatusTarefa; titulo: string }[] = [
   { id: 'concluida', titulo: 'Concluída' },
 ];
 
-export function TarefasKanbanLocal({ objetivoId, habitoId, onRefresh }: TarefasKanbanLocalProps) {
+export function TarefasKanbanLocal({ habitoId, onRefresh }: TarefasKanbanLocalProps) {
   return (
     <DndProvider backend={HTML5Backend}>
-      <KanbanContent objetivoId={objetivoId} habitoId={habitoId} onRefresh={onRefresh} />
+      <KanbanContent habitoId={habitoId} onRefresh={onRefresh} />
     </DndProvider>
   );
 }
 
-function KanbanContent({ objetivoId, habitoId, onRefresh }: TarefasKanbanLocalProps) {
+function KanbanContent({ habitoId, onRefresh }: TarefasKanbanLocalProps) {
   const [tarefaEditando, setTarefaEditando] = useState<Tarefa | undefined>();
   const [dialogAberto, setDialogAberto] = useState(false);
   const [deleteDialogAberto, setDeleteDialogAberto] = useState(false);
@@ -58,13 +57,28 @@ function KanbanContent({ objetivoId, habitoId, onRefresh }: TarefasKanbanLocalPr
   const [tarefas, setTarefas] = useState<Tarefa[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Função auxiliar para normalizar tarefas (garantir habitoId e campos numéricos)
+  const normalizarTarefa = (t: Tarefa): Tarefa => ({
+    ...t,
+    habitoId: t.habitoId || habitoId,
+    // Preservar estimativaHoras e horasGastas mesmo se forem 0 ou null
+    estimativaHoras: t.estimativaHoras !== null && t.estimativaHoras !== undefined 
+      ? (typeof t.estimativaHoras === 'string' ? parseFloat(t.estimativaHoras) : Number(t.estimativaHoras))
+      : undefined,
+    horasGastas: t.horasGastas !== null && t.horasGastas !== undefined
+      ? (typeof t.horasGastas === 'string' ? parseFloat(t.horasGastas) : Number(t.horasGastas))
+      : undefined
+  });
+
   // Carregar tarefas quando o componente montar ou habitoId mudar
   useEffect(() => {
     const carregarTarefas = async () => {
       try {
         setLoading(true);
         const response = await getTarefasByHabito(habitoId);
-        setTarefas(response.data || []);
+        // Normalizar todas as tarefas
+        const tarefasComHabitoId = (response.data || []).map(normalizarTarefa);
+        setTarefas(tarefasComHabitoId);
       } catch (error) {
         console.error('Erro ao carregar tarefas:', error);
         setTarefas([]);
@@ -77,43 +91,78 @@ function KanbanContent({ objetivoId, habitoId, onRefresh }: TarefasKanbanLocalPr
   }, [habitoId]);
 
   const handleDrop = async (tarefaId: string, novoStatus: StatusTarefa) => {
+    // Encontrar a tarefa que está sendo movida
+    const tarefaMovida = tarefas.find(t => t.id === tarefaId);
+    if (!tarefaMovida) return;
+
+    // Verificar se o status realmente mudou
+    if (tarefaMovida.status === novoStatus) return;
+
+    // Salvar o estado anterior para reversão em caso de erro
+    const statusAnterior = tarefaMovida.status;
+    
+    // Atualização otimista: mover o card visualmente imediatamente
+    setTarefas(prev => prev.map(tarefa => 
+      tarefa.id === tarefaId ? { ...tarefa, status: novoStatus } : tarefa
+    ));
+
     try {
-      await updateTarefa(tarefaId, { status: novoStatus });
-      toast.success('Status da tarefa atualizado!');
-      // Recarregar a lista de tarefas
-      const response = await getTarefasByHabito(habitoId);
-      setTarefas(response.data || []);
+      // Fazer a requisição PUT apenas com o campo status
+      const response = await updateTarefa(tarefaId, { status: novoStatus });
+      
+      // Atualizar com os dados retornados do servidor
+      const tarefaAtualizada = normalizarTarefa(response.data);
+      setTarefas(prev => prev.map(tarefa => 
+        tarefa.id === tarefaId ? tarefaAtualizada : tarefa
+      ));
+      
+      // Notificar o componente pai para recarregar se necessário
       onRefresh();
+      
+      // Não mostrar toast em caso de sucesso silencioso (opcional)
+      // toast.success('Status da tarefa atualizado!');
     } catch (error) {
       console.error('Erro ao atualizar status da tarefa:', error);
-      toast.error('Erro ao atualizar status da tarefa');
+      
+      // Reverter o movimento em caso de erro
+      setTarefas(prev => prev.map(tarefa => 
+        tarefa.id === tarefaId ? { ...tarefa, status: statusAnterior } : tarefa
+      ));
+      
+      toast.error('Erro ao atualizar status da tarefa. Movimento revertido.');
     }
   };
 
   const handleEditar = (tarefa: Tarefa) => {
     console.log('✏️ LOCAL: Clicou em editar tarefa:', tarefa.titulo);
-    setTarefaEditando(tarefa);
-    setDialogAberto(true);
-  };
-
-  const handleCriar = () => {
-    setTarefaEditando(undefined);
+    // Garantir que a tarefa tenha habitoId
+    const tarefaComHabitoId = {
+      ...tarefa,
+      habitoId: tarefa.habitoId || habitoId
+    };
+    setTarefaEditando(tarefaComHabitoId);
     setDialogAberto(true);
   };
 
   const handleSalvar = async (data: Omit<Tarefa, 'id' | 'createdAt' | 'updatedAt'>) => {
-    if (tarefaEditando) {
-      try {
+    try {
+      if (tarefaEditando) {
         await updateTarefa(tarefaEditando.id, data);
         toast.success('Tarefa atualizada com sucesso!');
-        // Recarregar a lista de tarefas
-        const response = await getTarefasByHabito(habitoId);
-        setTarefas(response.data || []);
-        onRefresh();
-      } catch (error) {
-        console.error('Erro ao atualizar tarefa:', error);
-        toast.error('Erro ao atualizar tarefa');
+      } else {
+        await createTarefa(data);
+        toast.success('Tarefa criada com sucesso!');
       }
+      // Recarregar a lista de tarefas
+      const response = await getTarefasByHabito(habitoId);
+      const tarefasComHabitoId = (response.data || []).map(normalizarTarefa);
+      setTarefas(tarefasComHabitoId);
+      setTarefaEditando(undefined);
+      setDialogAberto(false);
+      onRefresh();
+    } catch (error) {
+      console.error('Erro ao salvar tarefa:', error);
+      toast.error('Erro ao salvar tarefa');
     }
   };
 
@@ -129,7 +178,11 @@ function KanbanContent({ objetivoId, habitoId, onRefresh }: TarefasKanbanLocalPr
         await deleteTarefa(tarefaParaDeletar);
         // Recarregar a lista de tarefas
         const response = await getTarefasByHabito(habitoId);
-        setTarefas(response.data || []);
+        const tarefasComHabitoId = (response.data || []).map((t: Tarefa) => ({
+          ...t,
+          habitoId: t.habitoId || habitoId
+        }));
+        setTarefas(tarefasComHabitoId);
         toast.success('Tarefa excluída com sucesso!');
         onRefresh();
       } catch (error) {
@@ -159,14 +212,6 @@ function KanbanContent({ objetivoId, habitoId, onRefresh }: TarefasKanbanLocalPr
 
   return (
     <>
-      <div className="flex items-center justify-between mb-4">
-        <h4 className="font-medium">Tarefas em Kanban</h4>
-        <Button onClick={handleCriar} size="sm">
-          <Plus className="h-4 w-4 mr-2" />
-          Adicionar Tarefa
-        </Button>
-      </div>
-
       <div className="flex gap-4 overflow-x-auto pb-4">
         {COLUNAS.map((coluna) => (
           <KanbanColumn
@@ -184,7 +229,6 @@ function KanbanContent({ objetivoId, habitoId, onRefresh }: TarefasKanbanLocalPr
         open={dialogAberto}
         onOpenChange={setDialogAberto}
         tarefa={tarefaEditando}
-        objetivoIdPadrao={objetivoId}
         habitoIdPadrao={habitoId}
         onSave={handleSalvar}
       />
@@ -219,19 +263,20 @@ interface KanbanColumnProps {
 }
 
 function KanbanColumn({ coluna, tarefas, onDrop, onEdit, onDelete }: KanbanColumnProps) {
-  const [{ isOver }, drop] = useDrop(() => ({
+  const [{ isOver, canDrop }, drop] = useDrop(() => ({
     accept: 'TAREFA',
     drop: (item: { id: string }) => onDrop(item.id, coluna.id),
     collect: (monitor) => ({
       isOver: monitor.isOver(),
+      canDrop: monitor.canDrop(),
     }),
   }));
 
   return (
     <div
       ref={drop as any}
-      className={`flex-shrink-0 w-72 bg-gray-50 rounded-lg p-3 ${
-        isOver ? 'ring-2 ring-blue-500' : ''
+      className={`flex-shrink-0 w-72 bg-gray-50 rounded-lg p-3 transition-colors ${
+        isOver && canDrop ? 'ring-2 ring-blue-500 bg-blue-50' : ''
       }`}
     >
       <div className="flex items-center justify-between mb-3">
@@ -278,12 +323,12 @@ function TarefaCard({ tarefa, onEdit, onDelete }: TarefaCardProps) {
   };
 
   return (
-    <Card
-      ref={drag as any}
-      className={`p-3 cursor-move border-l-4 ${getPrioridadeCor(tarefa.prioridade)} ${
-        isDragging ? 'opacity-50' : ''
-      }`}
-    >
+    <div ref={drag as any}>
+      <Card
+        className={`p-3 cursor-move border-l-4 ${getPrioridadeCor(tarefa.prioridade)} ${
+          isDragging ? 'opacity-50' : ''
+        }`}
+      >
       <div className="space-y-2">
         <div className="flex items-start justify-between gap-2">
           <h5 className="text-sm flex-1">{tarefa.titulo}</h5>
@@ -339,5 +384,6 @@ function TarefaCard({ tarefa, onEdit, onDelete }: TarefaCardProps) {
         </div>
       </div>
     </Card>
+    </div>
   );
 }

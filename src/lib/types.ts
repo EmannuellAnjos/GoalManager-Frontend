@@ -34,8 +34,7 @@ export interface Habito {
 
 export interface Tarefa {
   id: string;
-  objetivoId?: string;
-  habitoId?: string;
+  habitoId: string; // Obrigatório - tarefas agora são ligadas apenas a hábitos
   titulo: string;
   descricao?: string;
   prioridade?: Prioridade;
